@@ -65,18 +65,22 @@ export const authService = {
   async syncUserProfile(user) {
     if (!isSupabaseConfigured() || !user?.id) return null;
     try {
+      // Only include company/linkedin_url when they actually have a value,
+      // so an ordinary login (without those fields) won't overwrite existing DB data with null.
       const profileData = {
         id: user.id,
         email: user.email,
         name: user.name || user.email?.split('@')[0],
         role: user.role || 'student',
-        company: user.company || null,
-        linkedin_url: user.linkedin_url || user.linkedinUrl || null,
         approval_status: user.role === 'recruiter' ? (user.approval_status || 'pending') : 'approved',
         is_approved: user.role === 'recruiter' ? (user.is_approved ?? false) : true,
         avatar_url: user.avatar || user.avatar_url,
         updated_at: new Date().toISOString(),
       };
+      const companyVal = user.company || null;
+      const linkedinVal = user.linkedin_url || user.linkedinUrl || null;
+      if (companyVal) profileData.company = companyVal;
+      if (linkedinVal) profileData.linkedin_url = linkedinVal;
       const { data, error } = await supabase.from('profiles').upsert(profileData).select().single();
       if (error) {
         console.warn('Profile sync notice:', error.message);
@@ -202,6 +206,9 @@ export const authService = {
         email: data.user.email,
         name: data.user.user_metadata?.full_name || email.split('@')[0],
         role: data.user.user_metadata?.role || role,
+        company: data.user.user_metadata?.company || '',
+        linkedin_url: data.user.user_metadata?.linkedin_url || '',
+        linkedinUrl: data.user.user_metadata?.linkedin_url || '',
         avatar: data.user.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
         created_at: data.user.created_at,
       };

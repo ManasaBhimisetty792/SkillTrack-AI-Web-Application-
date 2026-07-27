@@ -2,7 +2,7 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
+from app.api.profile import router as profile_router
 from app.core.config import settings
 from app.core.logging import logger
 from app.api.auth import router as auth_router
@@ -61,7 +61,7 @@ def health_check():
 # Include Routers
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
-
+app.include_router(profile_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn
