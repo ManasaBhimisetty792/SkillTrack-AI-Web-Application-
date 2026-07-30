@@ -205,6 +205,63 @@
   border: 1.5px solid var(--color-surface);
 }
 
+.user-menu-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.user-display-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1;
+  max-width: 140px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.user-avatar-btn {
+  width: 42px;
+  height: 42px;
+  background: none;
+  border: 2px solid var(--color-border);
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-avatar-btn:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-ring);
+}
+
+.avatar-img {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .user-display-name {
+    display: none;
+  }
+
+  .user-menu-container {
+    gap: 0;
+  }
+}
 /* ── User Menu ────────────────────────────────────────────────────── */
 .user-menu-container {
   position: relative;
@@ -312,6 +369,50 @@
 .logout-option:hover {
   background: var(--color-danger-light);
   color: var(--color-danger);
+}
+
+/* ── Topbar-style User Button (matches recruiter Topbar) ─────────── */
+.topbar-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: transparent;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.topbar-user-btn:hover {
+  background: var(--color-surface-sec);
+}
+
+.user-details-sm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.user-name-sm {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.user-role-sm {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+  text-transform: capitalize;
+}
+
+@media (max-width: 768px) {
+  .user-details-sm {
+    display: none;
+  }
 }
 
 /* ── Mobile Toggle Button ─────────────────────────────────────────── */

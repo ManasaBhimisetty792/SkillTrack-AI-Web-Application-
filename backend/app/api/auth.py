@@ -13,7 +13,7 @@ from app.schemas.auth import (
 )
 from app.services.auth_service import auth_service
 from app.middleware.auth_middleware import get_current_user
-from app.models.user import User
+from app.models.user import Profile
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -43,7 +43,7 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-def logout(current_user: User = Depends(get_current_user)):
+def logout(current_user: Profile = Depends(get_current_user)):
     """Revoke user session."""
     return {"message": "Logged out successfully", "user_id": current_user.id}
 
@@ -61,6 +61,6 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(current_user: Profile = Depends(get_current_user)):
     """Get authenticated user profile."""
     return current_user

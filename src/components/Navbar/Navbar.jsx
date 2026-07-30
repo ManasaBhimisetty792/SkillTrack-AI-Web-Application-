@@ -9,9 +9,6 @@ import {
   FiGrid,
   FiLogOut,
   FiChevronDown,
-  FiBriefcase,
-  FiShield,
-  FiCheckCircle,
 } from 'react-icons/fi';
 import { HiSparkles } from 'react-icons/hi';
 import { useAuth } from '../../context/AuthContext';
@@ -127,29 +124,30 @@ const Navbar = () => {
           <div className="navbar-actions">
             <ThemeToggle size="small" />
             {isAuthenticated ? (
-              /* Authenticated user menu */
-              <div className="user-menu-container" ref={userDropdownRef}>
-                <Link
-                  to={`${getDashboardPath().replace('/dashboard', '')}/notifications`}
-                  className="icon-btn-glass"
-                  aria-label="View notifications"
-                >
-                  <FiBell />
-                  <span className="notification-dot" aria-hidden="true" />
-                </Link>
-
+              /* ── Authenticated: Topbar-style avatar + name + chevron ── */
+              <div className="profile-dropdown-container" ref={userDropdownRef} style={{ position: 'relative' }}>
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="user-avatar-btn"
-                  aria-label="Open user menu"
+                  className="topbar-user-btn"
+                  aria-label="User Profile Menu"
                   aria-expanded={userDropdownOpen}
                   aria-haspopup="true"
                 >
                   <img
-                    src={user?.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user?.name || 'User') + '&background=4F46E5&color=fff&size=80'}
+                    src={
+                      user?.avatar ||
+                      'https://ui-avatars.com/api/?name=' +
+                        encodeURIComponent(user?.name || 'User') +
+                        '&background=4F46E5&color=fff&size=80'
+                    }
                     alt={user?.name || 'User'}
                     className="avatar-img"
                   />
+                  <div className="user-details-sm">
+                    <span className="user-name-sm">{user?.name || 'User'}</span>
+                    <span className="user-role-sm">{role?.toUpperCase()}</span>
+                  </div>
+                  <FiChevronDown style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }} />
                 </button>
 
                 <AnimatePresence>
@@ -159,31 +157,42 @@ const Navbar = () => {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 8, scale: 0.97 }}
                       transition={{ duration: 0.18 }}
-                      className="user-dropdown glass-card"
+                      className="profile-dropdown-menu glass-card"
                       role="menu"
                     >
-                      <div className="user-info-header">
-                        <div className="user-name">{user?.name}</div>
-                        <div className="user-email">{user?.email}</div>
+                      <div className="dropdown-header">
+                        <p className="dropdown-user-name">{user?.name || 'User'}</p>
+                        <p className="dropdown-user-email">{user?.email}</p>
+                        <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem' }}>
+                          <span className="badge-glass" style={{ fontSize: '0.68rem' }}>
+                            {role?.toUpperCase()}
+                          </span>
+                        </div>
                       </div>
-                      <hr className="dropdown-divider" />
-                      <Link to={getDashboardPath()} className="dropdown-option" role="menuitem">
+                      <div className="dropdown-divider" />
+                      <Link
+                        to={getDashboardPath()}
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="dropdown-item"
+                        role="menuitem"
+                      >
                         <FiGrid aria-hidden="true" /> Dashboard
                       </Link>
                       <Link
-                        to={`${getDashboardPath().replace('/dashboard', '')}/profile`}
-                        className="dropdown-option"
+                        to={`/${role}/profile`}
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="dropdown-item"
                         role="menuitem"
                       >
-                        <FiUser aria-hidden="true" /> Profile & Settings
+                        <FiUser aria-hidden="true" /> Profile Settings
                       </Link>
-                      <hr className="dropdown-divider" />
+                      <div className="dropdown-divider" />
                       <button
                         onClick={handleLogout}
-                        className="dropdown-option logout-option"
+                        className="dropdown-item dropdown-logout"
                         role="menuitem"
                       >
-                        <FiLogOut aria-hidden="true" /> Sign Out
+                        <FiLogOut aria-hidden="true" /> Logout
                       </button>
                     </motion.div>
                   )}
@@ -199,13 +208,6 @@ const Navbar = () => {
                 >
                   Login
                 </Link>
-                {/* <Link
-                  to="/signup"
-                  className="btn-primary nav-btn-sm"
-                  aria-label="Create a free account"
-                >
-                  Sign Up Free
-                </Link> */}
               </div>
             )}
 

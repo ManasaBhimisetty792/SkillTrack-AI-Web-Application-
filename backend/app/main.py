@@ -7,10 +7,11 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.api.auth import router as auth_router
 from app.api.payments import router as payments_router
+from app.api.resume import router as resume_router
 from app.database.session import engine
 from app.models.user import Base
-from app.models.payment import Payment          # noqa: F401 — register model
-from app.models.subscription import Subscription  # noqa: F401 — register model
+from app.models.payment import Payment          # noqa: F401
+from app.models.subscription import Subscription  # noqa: F401
 
 # Auto-create tables in development / SQLite mode
 try:
@@ -62,6 +63,7 @@ def health_check():
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
+app.include_router(resume_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn

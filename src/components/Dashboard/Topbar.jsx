@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiSearch, FiBell, FiMenu, FiUser, FiLogOut, FiShield, FiBriefcase, FiChevronDown } from 'react-icons/fi';
+import {  FiBell, FiMenu, FiUser, FiLogOut, FiShield, FiBriefcase, FiChevronDown } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
 import Breadcrumb from './cards/Breadcrumb';
 import ThemeToggle from '../common/ThemeToggle';
@@ -32,7 +32,7 @@ export const Topbar = ({ title, onMenuToggle }) => {
         </div>
       </div>
 
-      <div className="topbar-search">
+      {/* <div className="topbar-search">
         <FiSearch className="search-icon" aria-hidden="true" />
         <input
           type="text"
@@ -40,11 +40,11 @@ export const Topbar = ({ title, onMenuToggle }) => {
           className="input-glass search-input"
           aria-label="Global search input"
         />
-      </div>
+      </div> */}
 
       <div className="topbar-actions">
         {/* Role Switcher Demo Control */}
-        <div className="demo-role-switcher">
+        {/* <div className="demo-role-switcher">
           <select
             value={role}
             onChange={(e) => {
@@ -59,7 +59,7 @@ export const Topbar = ({ title, onMenuToggle }) => {
             <option value="recruiter">Recruiter Portal</option>
             <option value="admin">Admin Portal</option>
           </select>
-        </div>
+        </div> */}
 
         {/* Notifications Icon */}
         <Link
@@ -89,9 +89,8 @@ export const Topbar = ({ title, onMenuToggle }) => {
               className="avatar-img"
             />
             <div className="user-details-sm">
-              <span className="user-name-sm">{user?.name || 'Alex Johnson'}</span>
-              <span className="user-role-sm">{role?.toUpperCase()}</span>
-            </div>
+  <span className="user-name-sm">{user?.name || 'Alex Johnson'}</span>
+</div>
             <FiChevronDown style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }} />
           </button>
 
@@ -126,4 +125,4 @@ export const Topbar = ({ title, onMenuToggle }) => {
   );
 };
 
-export default Topbar;
+export default Topbar; 

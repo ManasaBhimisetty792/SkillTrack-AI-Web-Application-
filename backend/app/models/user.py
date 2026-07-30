@@ -1,27 +1,68 @@
 from datetime import datetime, timezone
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
-class User(Base):
-    __tablename__ = "users"
+
+class Profile(Base):
+    __tablename__ = "profiles"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    email = Column(String, unique=True, index=True, nullable=False)
-    name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=True)
-    role = Column(String, default="student", nullable=False)
+    email = Column(String, unique=True, index=True, nullable=True)
+    name = Column(String, nullable=True)
+    role = Column(String, nullable=False, default="student")
     avatar_url = Column(String, nullable=True)
-    email_verified = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    linkedin_url = Column(String, nullable=True)
-    company = Column(String, nullable=True)
-    approval_status = Column(String, nullable=True)
-    is_approved = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
-    def __repr__(self):
-        return f"<User id={self.id} email={self.email} role={self.role}>"
+
+# Alias User to Profile for backward compatibility
+User = Profile
+
+
+class CandidateProfile(Base):
+    __tablename__ = "candidate_profiles"
+
+    id = Column(String, ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True)
+    username = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    bio = Column(String, nullable=True)
+    current_status = Column(String, nullable=True)
+    github_url = Column(String, nullable=True)
+    portfolio_url = Column(String, nullable=True)
+    resume_file_name = Column(String, nullable=True)
+    resume_file_url = Column(String, nullable=True)
+    profile_completion_pct = Column(Integer, default=0)
+    website = Column(String, nullable=True)
+    linkedin_url = Column(String, nullable=True)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class RecruiterProfile(Base):
+    __tablename__ = "recruiter_profiles"
+
+    id = Column(String, ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True)
+    username = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    bio = Column(String, nullable=True)
+    company = Column(String, nullable=True)
+    approval_status = Column(String, default="pending")
+    is_approved = Column(Boolean, default=False)
+    linkedin_url = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

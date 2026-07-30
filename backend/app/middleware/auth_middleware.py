@@ -7,7 +7,7 @@ from app.database.session import get_db
 from app.utils.security import decode_token
 from app.core.exceptions import AuthenticationError, PermissionDeniedError
 from app.repositories.user_repository import user_repository
-from app.models.user import User
+from app.models.user import Profile
 
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -15,7 +15,7 @@ security_bearer = HTTPBearer(auto_error=False)
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     db: Session = Depends(get_db)
-) -> User:
+) -> Profile:
     if not credentials:
         raise AuthenticationError("Authorization bearer token required")
 
@@ -43,25 +43,19 @@ def get_current_user(
             user = user_repository.get_by_email(db, email=email)
 
         if not user:
-            # Construct a safe active user fallback so frontend requests don't fail with 401
-            user = User(
+            user = Profile(
                 id=user_id,
                 email=payload.get("email", "student@skilltrack.ai"),
-                full_name=payload.get("name", "Student Candidate"),
+                name=payload.get("name", "Student Candidate"),
                 role=payload.get("role", "student"),
-                is_active=True,
-                is_premium=False
             )
             return user
-
-    if not user.is_active:
-        raise PermissionDeniedError("Account is inactive")
 
     return user
 
 
 def require_role(allowed_roles: list[str]):
-    def role_checker(current_user: User = Depends(get_current_user)):
+    def role_checker(current_user: Profile = Depends(get_current_user)):
         if current_user.role not in allowed_roles:
             raise PermissionDeniedError(f"Access restricted to roles: {', '.join(allowed_roles)}")
         return current_user

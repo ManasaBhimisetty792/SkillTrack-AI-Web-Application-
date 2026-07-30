@@ -9,13 +9,14 @@ import { HiSparkles } from 'react-icons/hi';
 import { useAuth } from '../../context/AuthContext';
 
 export const STUDENT_NAV = [
-  { label: 'Dashboard', path: '/student/dashboard', icon: <FiGrid />, isFunctional: true },
-  { label: 'Profile', path: '/student/profile', icon: <FiUser />, isFunctional: false },
-  { label: 'Resume', path: '/student/resume', icon: <FiFileText />, isFunctional: false },
-  { label: 'Mock Interviews', path: '/student/mock-interviews', icon: <FiVideo />, isFunctional: false },
-  { label: 'Career Insights', path: '/student/recommendations', icon: <HiSparkles />, isFunctional: false },
-  { label: 'Notifications', path: '/student/notifications', icon: <FiBell />, isFunctional: false },
-  { label: 'Settings', path: '/student/settings', icon: <FiSettings />, isFunctional: false },
+  { label: 'Dashboard', path: '/student/dashboard', icon: <FiGrid />, category: 'Main' },
+  { label: 'Profile', path: '/student/profile', icon: <FiUser />, category: 'Main' },
+  { label: 'Resume', path: '/student/resume', icon: <FiFileText />, category: 'Career Tools' },
+  { label: 'Find Recruiters', path: '/student/recruiters', icon: <FiUsers />, category: 'Career Tools' },
+  { label: 'Live Interview Room', path: '/student/live-interview', icon: <FiVideo />, category: 'Interviews' },
+  { label: 'Interview History', path: '/student/interview-history', icon: <FiCalendar />, category: 'Interviews' },
+  { label: 'Reports', path: '/student/reports', icon: <FiBarChart2 />, category: 'Analytics' },
+  { label: 'Notifications', path: '/student/notifications', icon: <FiBell />, category: 'Account' },
 ];
 
 export const RECRUITER_NAV = [

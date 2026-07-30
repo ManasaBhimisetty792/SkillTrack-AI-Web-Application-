@@ -14,6 +14,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, description="User password (min 8 chars)")
+    company: Optional[str] = None
+    linkedin_url: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -34,8 +36,9 @@ class ResetPasswordRequest(BaseModel):
 class UserResponse(UserBase):
     id: str
     avatar_url: Optional[str] = None
-    email_verified: bool = False
-    created_at: datetime
+    company: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

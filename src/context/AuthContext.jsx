@@ -21,6 +21,7 @@ export const AuthProvider = ({ children }) => {
           const { data } = await supabase.auth.getSession();
           if (data.session) {
             setSession(data.session);
+            // getCurrentUser reads role from public.profiles, not auth metadata
             const currentUser = await authService.getCurrentUser();
             if (isMounted && currentUser) setUser(currentUser);
           }
@@ -40,11 +41,10 @@ export const AuthProvider = ({ children }) => {
     let authSubscription = null;
     if (isSupabaseConfigured()) {
       const { data: listener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-        // Always update session state
         setSession(newSession);
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          // getCurrentUser already calls syncUserProfile to persist to Supabase profiles table
+          // Always fetch from public.profiles to get the persisted role
           const freshUser = await authService.getCurrentUser();
           if (isMounted && freshUser) {
             setUser(freshUser);
@@ -68,10 +68,22 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  /**
+   * Signup — passes role, name, email, password, company, linkedinUrl to authService.
+   * The Supabase trigger creates the base profiles row automatically.
+   * authService.signUp then syncs the role-specific row.
+   */
   const signup = useCallback(async (form) => {
     setLoading(true);
     try {
-      const newUser = await authService.signUp(form);
+      const newUser = await authService.signUp({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        role: form.role || 'student',
+        company: form.company || '',
+        linkedinUrl: form.linkedinUrl || '',
+      });
       setUser(newUser);
       toast.success(`Welcome aboard, ${newUser.name}! Account created successfully.`);
       return newUser;
@@ -83,10 +95,18 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  /**
+   * Login — after auth, role is read from public.profiles so routing is
+   * always driven by the database value, not the tab the user clicked.
+   */
   const login = useCallback(async (form) => {
     setLoading(true);
     try {
-      const loggedInUser = await authService.signIn(form);
+      const loggedInUser = await authService.signIn({
+        email: form.email,
+        password: form.password,
+        role: form.role || 'student',
+      });
       setUser(loggedInUser);
       toast.success(`Welcome back, ${loggedInUser.name}!`);
       return loggedInUser;
@@ -101,9 +121,6 @@ export const AuthProvider = ({ children }) => {
   const googleLogin = useCallback(async () => {
     try {
       const result = await authService.signInWithGoogle();
-      // If result has a URL, it's a Supabase OAuth redirect — do nothing here.
-      // The onAuthStateChange listener will fire after the redirect and sync the profile.
-      // If result has a 'name' (demo fallback / mock), set user immediately.
       if (result && result.name) {
         setUser(result);
         toast.success(`Signed in as ${result.name}`);
@@ -158,6 +175,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     session,
+    // role is always sourced from user.role (which comes from public.profiles)
     role: user?.role || 'student',
     isAuthenticated: Boolean(user),
     loading,

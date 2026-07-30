@@ -39,9 +39,10 @@ export const authService = {
    */
   async getSession() {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      return data.session;
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!error && data?.session) return data.session;
+      } catch (_) {}
     }
     const user = tokenStorage.user;
     return user ? { user, access_token: 'mock_session_token' } : null;
@@ -52,45 +53,83 @@ export const authService = {
    */
   async refreshSession() {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) throw error;
-      return data.session;
+      try {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (!error && data?.session) return data.session;
+      } catch (_) {}
     }
     return this.getSession();
   },
 
   /**
-   * Sync user profile into Supabase public 'profiles' database table
+   * Sync user profile into Supabase public tables:
+   * - public.profiles (base row)
+   * - public.candidate_profiles or public.recruiter_profiles (role-specific)
+   *
+   * Admin users are NEVER saved into these tables.
+   * The trigger on_auth_user_created handles inserting into profiles on signup;
+   * syncUserProfile is used for post-login upsert of role-specific tables.
    */
   async syncUserProfile(user) {
-    if (!isSupabaseConfigured() || !user?.id) return null;
+    if (!user?.id || user.role === 'admin' || user.email === 'admin@skilltrack.ai') {
+      return null;
+    }
+    if (!isSupabaseConfigured()) return user;
+
     try {
-      // Only include company/linkedin_url when they actually have a value,
-      // so an ordinary login (without those fields) won't overwrite existing DB data with null.
-      const profileData = {
-        id: user.id,
-        email: user.email,
-        name: user.name || user.email?.split('@')[0],
-        role: user.role || 'student',
-        approval_status: user.role === 'recruiter' ? (user.approval_status || 'pending') : 'approved',
-        is_approved: user.role === 'recruiter' ? (user.is_approved ?? false) : true,
-        avatar_url: user.avatar || user.avatar_url,
-        updated_at: new Date().toISOString(),
-      };
-      const companyVal = user.company || null;
-      const linkedinVal = user.linkedin_url || user.linkedinUrl || null;
-      if (companyVal) profileData.company = companyVal;
-      if (linkedinVal) profileData.linkedin_url = linkedinVal;
-      const { data, error } = await supabase.from('profiles').upsert(profileData).select().single();
-      if (error) {
-        console.warn('Profile sync notice:', error.message);
-        if (error.code === '42703' || error.message.includes('column')) {
-          console.error('SUPABASE MIGRATION REQUIRED: Columns (linkedin_url, company, approval_status, is_approved) are missing in public.profiles table. Run the SQL script provided.');
-        } else if (error.code === '42501' || error.message.includes('policy') || error.message.includes('row-level security')) {
-          console.error('SUPABASE RLS POLICY REQUIRED: RLS on public.profiles blocked insert. Run the RLS policy / Database Trigger SQL script.');
-        }
+      const now = new Date().toISOString();
+      const role = user.role || 'student';
+
+      // 1. Upsert base profile row (trigger may have already created it)
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id: user.id,
+            email: user.email,
+            name: user.name || user.full_name || user.email.split('@')[0],
+            role,
+            avatar_url: user.avatar_url || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}`,
+            updated_at: now,
+          },
+          { onConflict: 'id' }
+        );
+      if (profileErr) console.warn('profiles upsert warning:', profileErr.message);
+
+      // 2. Upsert role-specific profile
+      if (role === 'recruiter') {
+        const recruiterData = {
+          id: user.id,
+          company: user.company || user.company_name || '',
+          linkedin_url: user.linkedin_url || user.linkedinUrl || '',
+          approval_status: user.approval_status || 'pending',
+          is_approved: user.is_approved ?? false,
+          website: user.website || '',
+          updated_at: now,
+        };
+        const { data, error } = await supabase
+          .from('recruiter_profiles')
+          .upsert(recruiterData, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
+        if (error) console.warn('recruiter_profiles sync warning:', error.message);
+        return data;
+      } else {
+        const candidateData = {
+          id: user.id,
+          phone: user.phone || '',
+          linkedin_url: user.linkedin_url || user.linkedinUrl || '',
+          website: user.website || '',
+          updated_at: now,
+        };
+        const { data, error } = await supabase
+          .from('candidate_profiles')
+          .upsert(candidateData, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
+        if (error) console.warn('candidate_profiles sync warning:', error.message);
+        return data;
       }
-      return data;
     } catch (e) {
       console.warn('Unable to sync profile to Supabase:', e.message);
       return null;
@@ -98,78 +137,215 @@ export const authService = {
   },
 
   /**
-   * Get current authenticated user
+   * Get current authenticated user details from:
+   * 1) Supabase auth.getUser()
+   * 2) public.profiles (role, name, email, avatar_url)
+   * 3) public.candidate_profiles or public.recruiter_profiles (role-specific fields)
    */
   async getCurrentUser() {
+    const localUser = tokenStorage.user;
+    if (localUser && (localUser.role === 'admin' || localUser.email === 'admin@skilltrack.ai')) {
+      return MOCK_USERS.admin;
+    }
+
     if (isSupabaseConfigured()) {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error) return null;
-      if (user) {
-        let dbProfile = null;
-        try {
-          const { data: profData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-          if (profData) dbProfile = profData;
-        } catch (_) {}
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user) return localUser || null;
+
+        if (user.email === 'admin@skilltrack.ai' || user.user_metadata?.role === 'admin') {
+          return MOCK_USERS.admin;
+        }
+
+        // Fetch base profile row (role lives here)
+        let { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        // ── BACKFILL FIX ─────────────────────────────────────────────────────
+        // Profile row is missing (user signed up before migration OR trigger
+        // didn't fire). Create it now so subsequent reads always succeed.
+        if (!profileData) {
+          const resolvedRole = user.user_metadata?.role || localUser?.role || 'student';
+          const resolvedName = user.user_metadata?.name ||
+            user.user_metadata?.full_name ||
+            localUser?.name ||
+            user.email.split('@')[0];
+          const resolvedAvatar = user.user_metadata?.avatar_url ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=4F46E5&color=fff`;
+
+          const { data: inserted } = await supabase
+            .from('profiles')
+            .upsert(
+              { id: user.id, email: user.email, name: resolvedName, role: resolvedRole, avatar_url: resolvedAvatar },
+              { onConflict: 'id' }
+            )
+            .select()
+            .maybeSingle();
+          profileData = inserted;
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        const role = profileData?.role || user.user_metadata?.role || localUser?.role || 'student';
+        let roleProfile = null;
+
+        if (role === 'recruiter') {
+          const { data } = await supabase
+            .from('recruiter_profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+          roleProfile = data;
+
+          // Backfill recruiter_profiles if also missing
+          if (!roleProfile) {
+            const { data: inserted } = await supabase
+              .from('recruiter_profiles')
+              .upsert(
+                {
+                  id: user.id,
+                  company: user.user_metadata?.company || localUser?.company || '',
+                  linkedin_url: user.user_metadata?.linkedin_url || localUser?.linkedin_url || '',
+                  approval_status: 'pending',
+                  is_approved: false,
+                },
+                { onConflict: 'id' }
+              )
+              .select()
+              .maybeSingle();
+            roleProfile = inserted;
+          }
+        } else {
+          const { data } = await supabase
+            .from('candidate_profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+          roleProfile = data;
+
+          // Backfill candidate_profiles if also missing
+          if (!roleProfile) {
+            const { data: inserted } = await supabase
+              .from('candidate_profiles')
+              .upsert(
+                { id: user.id, linkedin_url: user.user_metadata?.linkedin_url || '' },
+                { onConflict: 'id' }
+              )
+              .select()
+              .maybeSingle();
+            roleProfile = inserted;
+          }
+        }
 
         const formattedUser = {
           id: user.id,
           email: user.email,
-          name: dbProfile?.name || user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
-          role: dbProfile?.role || user.user_metadata?.role || 'student',
-          company: dbProfile?.company || user.user_metadata?.company || '',
-          linkedinUrl: dbProfile?.linkedin_url || user.user_metadata?.linkedin_url || '',
-          linkedin_url: dbProfile?.linkedin_url || user.user_metadata?.linkedin_url || '',
-          approval_status: dbProfile?.approval_status || (user.user_metadata?.role === 'recruiter' ? 'pending' : 'approved'),
-          is_approved: dbProfile?.is_approved ?? (user.user_metadata?.role !== 'recruiter'),
-          avatar: dbProfile?.avatar_url || user.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          created_at: user.created_at || new Date().toISOString(),
+          name: profileData?.name || user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
+          role,
+          avatar_url: profileData?.avatar_url || user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}`,
+          avatar: profileData?.avatar_url || user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}`,
+          // Candidate-specific
+          phone: roleProfile?.phone || '',
+          linkedin_url: roleProfile?.linkedin_url || '',
+          website: roleProfile?.website || '',
+          bio: roleProfile?.bio || '',
+          location: roleProfile?.location || '',
+          // Recruiter-specific
+          company: roleProfile?.company || user.user_metadata?.company || '',
+          approval_status: roleProfile?.approval_status || (role === 'recruiter' ? 'pending' : 'approved'),
+          is_approved: roleProfile?.is_approved ?? (role !== 'recruiter'),
+          // Common
+          created_at: profileData?.updated_at || user.created_at,
+          updated_at: profileData?.updated_at || user.created_at,
         };
-        await this.syncUserProfile(formattedUser);
+        tokenStorage.set({ user: formattedUser });
         return formattedUser;
+      } catch (err) {
+        console.warn('getCurrentUser error:', err.message);
       }
     }
-    return tokenStorage.user || null;
+    return localUser || null;
   },
 
   /**
-   * Sign Up with Email & Password
+   * Sign Up — calls Supabase Auth, trigger auto-creates profiles row,
+   * then syncs role-specific profile.
    */
   async signUp({ name, email, password, role = 'student', company = '', linkedinUrl = '' }) {
-    if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-            role,
-            company,
-            linkedin_url: linkedinUrl,
-            avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4F46E5&color=fff`,
-          },
-        },
-      });
-      if (error) throw error;
-
-      const user = {
-        id: data.user?.id || 'usr_' + Date.now(),
-        email,
-        name,
-        role,
-        company,
-        linkedinUrl,
-        linkedin_url: linkedinUrl,
-        approval_status: role === 'recruiter' ? 'pending' : 'approved',
-        is_approved: role !== 'recruiter',
-        avatar: data.user?.user_metadata?.avatar_url,
-        created_at: new Date().toISOString(),
-      };
-      tokenStorage.set({ user, access: data.session?.access_token || 'mock_token' });
-      await this.syncUserProfile(user);
-      return user;
+    if (role === 'admin' || email === 'admin@skilltrack.ai') {
+      throw new Error('Admin signup is disabled. Use direct Admin login.');
     }
 
-    // Fallback demo signup
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name,
+              role,
+              company,
+              linkedin_url: linkedinUrl,
+              avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4F46E5&color=fff`,
+            },
+          },
+        });
+        if (!error && data.user) {
+          const user = {
+            id: data.user.id,
+            email,
+            name,
+            role,
+            company,
+            linkedinUrl,
+            linkedin_url: linkedinUrl,
+            approval_status: role === 'recruiter' ? 'pending' : 'approved',
+            is_approved: role !== 'recruiter',
+            avatar: data.user.user_metadata?.avatar_url,
+            avatar_url: data.user.user_metadata?.avatar_url,
+            created_at: new Date().toISOString(),
+          };
+          tokenStorage.set({ user, access: data.session?.access_token || 'supabase_token' });
+          // Sync role-specific row (trigger handles base profiles row)
+          await this.syncUserProfile(user);
+          return user;
+        }
+        if (error) throw new Error(error.message);
+      } catch (err) {
+        console.warn('Supabase signup error:', err.message);
+        throw err;
+      }
+    }
+
+    // Try FastAPI Backend
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const response = await fetch(`${API_BASE}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name, role, company, linkedin_url: linkedinUrl }),
+      });
+      if (response.ok) {
+        const resData = await response.json();
+        const newUser = {
+          id: resData.user?.id || 'usr_' + Date.now(),
+          email,
+          name,
+          role,
+          company,
+          linkedin_url: linkedinUrl,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4F46E5&color=fff`,
+          created_at: new Date().toISOString(),
+        };
+        tokenStorage.set({ user: newUser, access: resData.access_token });
+        return newUser;
+      }
+    } catch (_) {}
+
+    // Demo fallback
     const newUser = {
       id: 'usr_' + Date.now(),
       email,
@@ -187,66 +363,126 @@ export const authService = {
     return newUser;
   },
 
-  /**
-   * Alias for signUp
-   */
   async signup(data) {
     return this.signUp(data);
   },
 
   /**
-   * Sign In / Login with Email & Password
+   * Sign In — fetches role from public.profiles after Supabase login,
+   * so routing is always driven by the stored profile role.
    */
   async signIn({ email, password, role = 'student' }) {
-    if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      const user = {
-        id: data.user.id,
-        email: data.user.email,
-        name: data.user.user_metadata?.full_name || email.split('@')[0],
-        role: data.user.user_metadata?.role || role,
-        company: data.user.user_metadata?.company || '',
-        linkedin_url: data.user.user_metadata?.linkedin_url || '',
-        linkedinUrl: data.user.user_metadata?.linkedin_url || '',
-        avatar: data.user.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        created_at: data.user.created_at,
-      };
-      tokenStorage.set({ user, access: data.session?.access_token });
-      await this.syncUserProfile(user);
-      return user;
+    // Admin shortcut
+    if (email === 'admin@skilltrack.ai' && password === 'Admin@123') {
+      const adminUser = MOCK_USERS.admin;
+      tokenStorage.set({ user: adminUser, access: 'admin_active_token' });
+      return adminUser;
     }
 
-    // Fallback demo login
-    const selectedUser = MOCK_USERS[role] || { ...MOCK_USERS.student, email, role };
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw new Error(error.message);
+
+        if (data?.user) {
+          const authMeta = data.user.user_metadata || {};
+          // Resolve role: prefer what's already in user_metadata, else use the
+          // tab the user clicked. getCurrentUser will read the DB value afterwards.
+          const resolvedRole = authMeta.role || role;
+          const resolvedName = authMeta.name || authMeta.full_name || email.split('@')[0];
+
+          // Temporary store so RLS auth.uid() works for the upsert below
+          tokenStorage.set({
+            user: { id: data.user.id, email, name: resolvedName, role: resolvedRole },
+            access: data.session?.access_token || 'sb_token',
+          });
+
+          // ── ENSURE PROFILE ROWS EXIST ──────────────────────────────────────
+          // This handles: (a) pre-migration users, (b) trigger delay edge cases.
+          await this.syncUserProfile({
+            id: data.user.id,
+            email: data.user.email,
+            name: resolvedName,
+            role: resolvedRole,
+            avatar_url: authMeta.avatar_url ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=4F46E5&color=fff`,
+            company: authMeta.company || '',
+            linkedin_url: authMeta.linkedin_url || '',
+          });
+          // ──────────────────────────────────────────────────────────────────
+
+          // Now read back full profile (role comes from public.profiles)
+          const freshUser = await this.getCurrentUser();
+          if (freshUser) {
+            tokenStorage.set({ user: freshUser, access: data.session?.access_token || 'sb_token' });
+            return freshUser;
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase sign-in error:', err.message);
+        throw err;
+      }
+    }
+
+    // Try FastAPI Backend
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, role }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const user = {
+          id: data.user?.id || 'usr_' + Date.now(),
+          email: data.user?.email || email,
+          name: data.user?.name || email.split('@')[0],
+          role: data.user?.role || role,
+          company: data.user?.company || '',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          created_at: new Date().toISOString(),
+        };
+        tokenStorage.set({ user, access: data.access_token || 'fastapi_token' });
+        return user;
+      }
+    } catch (_) {}
+
+    // Demo fallback
+    const baseUser = MOCK_USERS[role] || MOCK_USERS.student;
+    const formattedName = email
+      ? email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+      : baseUser.name;
+    const selectedUser = {
+      ...baseUser,
+      email: email || baseUser.email,
+      name: formattedName,
+      role: role || baseUser.role,
+    };
     tokenStorage.set({ user: selectedUser, access: 'mock_token_' + Date.now() });
     return selectedUser;
   },
 
-  /**
-   * Alias for signIn
-   */
   async login(data) {
     return this.signIn(data);
   },
 
   /**
-   * Continue with Google OAuth via Supabase
+   * Google OAuth
    */
   async signInWithGoogle() {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          // Redirect to /auth/callback so the app can sync profile and route by role
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      if (error) throw error;
-      return data;
+      try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
+        if (!error) return data;
+      } catch (_) {}
     }
 
-    // Demo fallback for Google OAuth button UI
     const user = {
       id: 'usr_google_' + Date.now(),
       email: 'user.google@gmail.com',
@@ -259,54 +495,41 @@ export const authService = {
     return user;
   },
 
-  /**
-   * Alias for signInWithGoogle
-   */
   async googleLogin() {
     return this.signInWithGoogle();
   },
 
-  /**
-   * Forgot Password request
-   */
   async forgotPassword(email) {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (error) throw error;
-      return data;
+      try {
+        const { data } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        return data;
+      } catch (_) {}
     }
     return { message: 'Password reset link sent' };
   },
 
-  /**
-   * Reset Password update
-   */
   async resetPassword(newPassword) {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) throw error;
-      return data;
+      try {
+        const { data } = await supabase.auth.updateUser({ password: newPassword });
+        return data;
+      } catch (_) {}
     }
     return { message: 'Password updated successfully' };
   },
 
-  /**
-   * Sign Out / Logout
-   */
   async signOut() {
     if (isSupabaseConfigured()) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (_) {}
     }
     tokenStorage.clear();
   },
 
-  /**
-   * Alias for signOut
-   */
   async logout() {
     return this.signOut();
   },

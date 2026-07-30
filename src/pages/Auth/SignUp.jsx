@@ -103,7 +103,7 @@ export const SignUp = () => {
   const handleGoogle = async () => {
     try {
       const user = await googleLogin();
-      if (user?.name) navigate('/', { replace: true });
+      if (user) navigate(getDashboardPath(user?.role || form.role), { replace: true });
     } catch (_) {}
   };
 

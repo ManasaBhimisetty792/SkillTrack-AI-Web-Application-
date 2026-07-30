@@ -1,14 +1,13 @@
-﻿-- ============================================================================
--- SKILLTRACK AI — SUPABASE DATABASE MIGRATION SCHEMA
+-- ============================================================================
+-- SKILLTRACK AI — SUPABASE DATABASE SCHEMA (Refactored Profile Architecture)
 -- ============================================================================
 
--- 1. PROFILES TABLE
+-- 1. BASE PROFILES TABLE (linked to auth.users by same UUID)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT UNIQUE,
-  full_name TEXT,
   name TEXT,
-  role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'recruiter', 'admin')),
+  role TEXT NOT NULL CHECK (role IN ('student', 'recruiter')) DEFAULT 'student',
   avatar_url TEXT,
   membership_type TEXT DEFAULT 'free' CHECK (membership_type IN ('free', 'premium')),
   is_premium BOOLEAN DEFAULT FALSE,
@@ -20,7 +19,40 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. STUDENT PAYMENTS TABLE (Permanent transaction history)
+-- 2. CANDIDATE PROFILES TABLE (id references profiles.id)
+CREATE TABLE IF NOT EXISTS public.candidate_profiles (
+  id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  username TEXT,
+  phone TEXT,
+  location TEXT,
+  bio TEXT,
+  current_status TEXT,
+  github_url TEXT,
+  portfolio_url TEXT,
+  resume_file_name TEXT,
+  resume_file_url TEXT,
+  profile_completion_pct INTEGER DEFAULT 0,
+  website TEXT,
+  linkedin_url TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. RECRUITER PROFILES TABLE (id references profiles.id)
+CREATE TABLE IF NOT EXISTS public.recruiter_profiles (
+  id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  username TEXT,
+  phone TEXT,
+  location TEXT,
+  bio TEXT,
+  company TEXT,
+  approval_status TEXT DEFAULT 'pending',
+  is_approved BOOLEAN DEFAULT FALSE,
+  linkedin_url TEXT,
+  website TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. STUDENT PAYMENTS TABLE (Permanent transaction history)
 CREATE TABLE IF NOT EXISTS public.student_payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -38,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public.student_payments (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. STUDENT SUBSCRIPTIONS TABLE
+-- 5. STUDENT SUBSCRIPTIONS TABLE
 CREATE TABLE IF NOT EXISTS public.student_subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -53,7 +85,7 @@ CREATE TABLE IF NOT EXISTS public.student_subscriptions (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. RECRUITER INTERVIEWS TABLE (Future Ready Architecture)
+-- 6. RECRUITER INTERVIEWS TABLE
 CREATE TABLE IF NOT EXISTS public.recruiter_interviews (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   recruiter_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -64,7 +96,7 @@ CREATE TABLE IF NOT EXISTS public.recruiter_interviews (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. RECRUITER EARNINGS TABLE (Future Ready Architecture)
+-- 7. RECRUITER EARNINGS TABLE
 CREATE TABLE IF NOT EXISTS public.recruiter_earnings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   recruiter_id UUID UNIQUE NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -76,7 +108,7 @@ CREATE TABLE IF NOT EXISTS public.recruiter_earnings (
   last_updated TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. RECRUITER PAYOUTS TABLE (Manual Admin Payouts Architecture)
+-- 8. RECRUITER PAYOUTS TABLE
 CREATE TABLE IF NOT EXISTS public.recruiter_payouts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   recruiter_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -90,8 +122,40 @@ CREATE TABLE IF NOT EXISTS public.recruiter_payouts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ROW LEVEL SECURITY (RLS) POLICIES
+-- ============================================================================
+-- TRIGGER: Auto-create base profiles row on auth signup
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, name, role, avatar_url)
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'name', ''),
+    COALESCE(new.raw_user_meta_data->>'role', 'student'),
+    COALESCE(new.raw_user_meta_data->>'avatar_url', '')
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- ============================================================================
+-- ROW LEVEL SECURITY (RLS)
+-- ============================================================================
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.candidate_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recruiter_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.recruiter_interviews ENABLE ROW LEVEL SECURITY;
@@ -99,9 +163,19 @@ ALTER TABLE public.recruiter_earnings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.recruiter_payouts ENABLE ROW LEVEL SECURITY;
 
 -- Profiles Policies
-CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "read own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+-- Candidate Profiles Policies
+CREATE POLICY "read own candidate profile" ON public.candidate_profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "insert own candidate profile" ON public.candidate_profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "update own candidate profile" ON public.candidate_profiles FOR UPDATE USING (auth.uid() = id);
+
+-- Recruiter Profiles Policies
+CREATE POLICY "read own recruiter profile" ON public.recruiter_profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "insert own recruiter profile" ON public.recruiter_profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "update own recruiter profile" ON public.recruiter_profiles FOR UPDATE USING (auth.uid() = id);
 
 -- Student Payments Policies
 CREATE POLICY "Students view own payments" ON public.student_payments FOR SELECT USING (auth.uid() = user_id);

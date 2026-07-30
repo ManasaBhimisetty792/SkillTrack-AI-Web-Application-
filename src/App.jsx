@@ -37,6 +37,10 @@ const StudentNotifications   = lazy(() => import('./pages/Student/StudentNotific
 const StudentSubscriptions   = lazy(() => import('./pages/Student/StudentSubscriptions'));
 const AIRecommendations      = lazy(() => import('./pages/Student/AIRecommendations'));
 const PaymentHistory         = lazy(() => import('./pages/Student/PaymentHistory'));
+const FindRecruiters         = lazy(() => import('./pages/Student/FindRecruiters'));
+const StudentLiveInterviewRoom = lazy(() => import('./pages/Student/LiveInterviewRoom'));
+const StudentInterviewHistory = lazy(() => import('./pages/Student/InterviewHistory'));
+const StudentReports         = lazy(() => import('./pages/Student/StudentReports'));
 
 /* ── Recruiter Pages (Lazy) ──────────────────────────────────────── */
 const RecruiterDashboard     = lazy(() => import('./pages/Recruiter/RecruiterDashboard'));
@@ -190,6 +194,11 @@ const App = () => {
               <Route path="/student/dashboard"    element={<ProtectedRoute allowedRoles={['student']}><StudentDashboard /></ProtectedRoute>} />
               <Route path="/student/profile"      element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
               <Route path="/student/resume"       element={<ProtectedRoute allowedRoles={['student']}><StudentResume /></ProtectedRoute>} />
+              <Route path="/student/recruiters"   element={<ProtectedRoute allowedRoles={['student']}><FindRecruiters /></ProtectedRoute>} />
+              <Route path="/find-recruiters"      element={<ProtectedRoute allowedRoles={['student']}><FindRecruiters /></ProtectedRoute>} />
+              <Route path="/student/live-interview" element={<ProtectedRoute allowedRoles={['student']}><StudentLiveInterviewRoom /></ProtectedRoute>} />
+              <Route path="/student/interview-history" element={<ProtectedRoute allowedRoles={['student']}><StudentInterviewHistory /></ProtectedRoute>} />
+              <Route path="/student/reports"      element={<ProtectedRoute allowedRoles={['student']}><StudentReports /></ProtectedRoute>} />
               <Route path="/student/resume-upload"   element={<ProtectedRoute allowedRoles={['student']}><ResumeUpload /></ProtectedRoute>} />
               <Route path="/student/payments"     element={<ProtectedRoute allowedRoles={['student']}><PaymentHistory /></ProtectedRoute>} />
               <Route path="/student/resume-analysis" element={<ProtectedRoute allowedRoles={['student']}><PremiumRoute featureName="ATS Resume Analysis"><ResumeAnalysis /></PremiumRoute></ProtectedRoute>} />

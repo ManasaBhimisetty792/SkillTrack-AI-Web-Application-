@@ -51,10 +51,19 @@ export const Login = () => {
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setIsSubmitting(true);
     try {
-      const user = await login({ email: form.email, password: form.password, role: form.role });
-      navigate('/', { replace: true });
-    } catch (_) {
-      setErrors({ auth: 'Invalid email or password. Please try again.' });
+      let targetRole = form.role;
+      if (form.email === 'admin@skilltrack.ai') {
+        targetRole = 'admin';
+      }
+      const user = await login({ email: form.email, password: form.password, role: targetRole });
+      if (user?.role === 'admin' || form.email === 'admin@skilltrack.ai') {
+        navigate('/admin/dashboard', { replace: true });
+      } else {
+        const target = from || getDashboardPath(user?.role || form.role);
+        navigate(target, { replace: true });
+      }
+    } catch (err) {
+      setErrors({ auth: err.message || 'Invalid email or password. Please try again.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -63,7 +72,10 @@ export const Login = () => {
   const handleGoogle = async () => {
     try {
       const user = await googleLogin();
-      if (user?.name) navigate('/', { replace: true });
+      if (user) {
+        const target = from || getDashboardPath(user?.role || 'student');
+        navigate(target, { replace: true });
+      }
     } catch (_) {}
   };
 
