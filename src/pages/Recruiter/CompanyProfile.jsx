@@ -1,79 +1,480 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import {
+  FiUser, FiBriefcase, FiMail, FiPhone, FiGlobe, FiMapPin,
+  FiAward, FiCheckCircle, FiShield, FiSave, FiAlertCircle, FiCamera, FiEdit3
+} from 'react-icons/fi';
 import DashboardLayout from '../../components/Dashboard/DashboardLayout';
-import { FiBriefcase, FiGlobe, FiMapPin, FiSave, FiLinkedin } from 'react-icons/fi';
-import toast from 'react-hot-toast';
-import { useAuth } from '../../context/AuthContext';
-import { userService } from '../../services/userService';
+import recruiterService from '../../services/recruiterService';
+import {supabase} from "../../services/supabaseClient";
 
 export const CompanyProfile = () => {
-  const { user } = useAuth();
-  const [linkedinUrl, setLinkedinUrl] = useState(user?.linkedinUrl || user?.linkedin_url || 'https://linkedin.com/in/recruiter-demo');
-  const [company, setCompany] = useState(user?.company || 'Nexus Tech Global');
+  const [activeTab, setActiveTab] = useState('personal');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  const [formData, setFormData] = useState({
+    full_name: '',
+    email: '',
+    phone: '',
+    designation: '',
+    avatar_url: '',
+    company_name: '',
+    company_logo: '',
+    company_website: '',
+    industry: '',
+    company_size: '',
+    location: '',
+    experience_years: 5,
+    specialization: '',
+    bio: '',
+    verification_status: 'Verified',
+    tax_id: '',
+  });
+
+  const loadProfile = async () => {
+    setLoading(true);
+    try {
+      const data = await recruiterService.getProfile();
+      if (data) {
+        setFormData({
+          full_name: data.full_name || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          designation: data.designation || '',
+          avatar_url: data.avatar_url || 'https://i.pravatar.cc/120?img=68',
+          company_name: data.company_name || '',
+          company_logo: data.company_logo || '',
+          company_website: data.company_website || '',
+          industry: data.industry || '',
+          company_size: data.company_size || '',
+          location: data.location || '',
+          experience_years: data.experience_years || 5,
+          specialization: data.specialization || '',
+          bio: data.bio || '',
+          verification_status: data.verification_status || 'Verified',
+          tax_id: data.tax_id || '',
+        });
+      }
+    } catch (err) {
+      showToast('error', 'Failed to load recruiter profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const showToast = (type, message) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const validate = () => {
+    const errs = {};
+    if (!formData.full_name.trim()) errs.full_name = 'Full name is required';
+    if (!formData.email.trim() || !formData.email.includes('@')) errs.email = 'Valid email is required';
+    if (!formData.company_name.trim()) errs.company_name = 'Company name is required';
+    if (!formData.phone.trim()) errs.phone = 'Phone number is required';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
+  };
+
+  const handleImageUpload = async (e) => {
+  const file = e.target.files?.[0];
+
+  if (!file) return;
+
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData?.user) {
+      showToast("error", "Please login again.");
+      return;
+    }
+
+    const fileExt = file.name.split(".").pop();
+
+    const fileName =
+      `${userData.user.id}-${Date.now()}.${fileExt}`;
+
+    const { error } = await supabase.storage
+      .from("profile_images")
+      .upload(fileName, file, {
+        upsert: true,
+      });
+
+    if (error) throw error;
+
+    const { data } = supabase.storage
+      .from("profile_images")
+      .getPublicUrl(fileName);
+
+    setFormData((prev) => ({
+      ...prev,
+      avatar_url: data.publicUrl,
+    }));
+
+    showToast("success", "Profile photo uploaded.");
+  } catch (err) {
+    console.error(err);
+    showToast("error", err.message);
+  }
+};
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!validate()) {
+      showToast('error', 'Please correct validation errors before saving.');
+      return;
+    }
+
+    setSaving(true);
     try {
-      if (user?.id) {
-        await userService.updateLinkedInUrl(user.id, linkedinUrl);
-      }
-      toast.success('Company & Recruiter profile updated successfully in Supabase!');
+      await recruiterService.updateProfile(formData);
+      showToast('success', 'Profile updated successfully across FastAPI & Supabase!');
+      await loadProfile(); // Reload updated profile
     } catch (err) {
-      toast.error('Failed to update profile: ' + err.message);
+      showToast('error', err.message || 'Failed to update profile.');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <DashboardLayout title="Recruiter Company Profile">
-      <div className="glass-card" style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '1.5rem' }}>Company & Branding Info</h2>
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div>
-            <label className="form-label">Company Name</label>
-            <input
-              type="text"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              className="input-glass"
+    <DashboardLayout title="Recruiter Profile">
+      {/* Toast Alert */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 20,
+            right: 20,
+            zIndex: 9999,
+            padding: '1rem 1.5rem',
+            borderRadius: '8px',
+            background: toast.type === 'success' ? '#149174' : '#ef4444',
+            color: '#fff',
+            fontWeight: 600,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          {toast.type === 'success' ? <FiCheckCircle /> : <FiAlertCircle />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Header Banner */}
+      <div className="glass-card mb-4" style={{ padding: '1.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative' }}>
+            <img
+              src={formData.avatar_url || 'https://i.pravatar.cc/120?img=68'}
+              alt={formData.full_name}
+              style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-primary)' }}
             />
+          
+  <div
+    style={{
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      background: 'var(--color-primary)',
+      color: '#fff',
+      borderRadius: '50%',
+      padding: '5px',
+      cursor: 'pointer',
+      display: 'flex'
+    }}
+    title="Change Photo"
+    onClick={() => document.getElementById("avatarUpload").click()}
+  >
+    <FiCamera size={14} />
+  </div>
+
+  <input
+    id="avatarUpload"
+    type="file"
+    accept="image/*"
+    style={{ display: "none" }}
+    onChange={handleImageUpload}
+  />
+
           </div>
 
-          <div>
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <FiLinkedin style={{ color: '#0077b5' }} /> Recruiter LinkedIn Profile URL (For Admin Verification)
-            </label>
-            <input
-              type="url"
-              value={linkedinUrl}
-              onChange={(e) => setLinkedinUrl(e.target.value)}
-              placeholder="https://linkedin.com/in/yourprofile"
-              className="input-glass"
-            />
-            <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.25rem', display: 'block' }}>
-              This URL is verified by platform administrators to grant recruiter privileges.
-            </span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label className="form-label">Website</label>
-              <input type="url" defaultValue="https://nexustech.global" className="input-glass" />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>{formData.full_name || 'John Doe'}</h2>
+              <span className="badge-glass" style={{ color: 'var(--color-success)', background: '#e6f9f4' }}>
+                <FiCheckCircle style={{ marginRight: 4 }} /> {formData.verification_status}
+              </span>
             </div>
-            <div>
-              <label className="form-label">Headquarters Location</label>
-              <input type="text" defaultValue="San Francisco, CA" className="input-glass" />
+            <p style={{ margin: '0.2rem 0 0 0', color: 'var(--color-muted)', fontSize: '0.9rem' }}>
+              {formData.designation} at <strong style={{ color: 'var(--color-text)' }}>{formData.company_name}</strong>
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
+              <span>📍 {formData.location || 'San Francisco, CA'}</span>
+              <span>💼 {formData.experience_years} Years Experience</span>
+              <span>📧 {formData.email}</span>
             </div>
           </div>
 
-          <div>
-            <label className="form-label">Company Overview</label>
-            <textarea rows={4} defaultValue="Nexus Tech Global is a premier AI and cloud infrastructure provider building distributed web platforms." className="input-glass" />
-          </div>
-
-          <button type="submit" className="btn-primary" style={{ alignSelf: 'flex-start' }}>
-            <FiSave /> Save Profile Changes
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FiSave /> {saving ? 'Saving...' : 'Save Profile Changes'}
           </button>
-        </form>
+        </div>
       </div>
+
+      {/* Navigation Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--color-border)' }}>
+        {[
+          { key: 'personal', label: 'Personal Details', icon: FiUser },
+          { key: 'company', label: 'Company Details', icon: FiBriefcase },
+          { key: 'professional', label: 'Professional Details', icon: FiAward },
+          { key: 'verification', label: 'Verification & Tax', icon: FiShield },
+        ].map((t) => {
+          const Icon = t.icon;
+          const isActive = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              style={{
+                padding: '0.75rem 1.25rem',
+                border: 'none',
+                background: 'transparent',
+                borderBottom: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
+                color: isActive ? 'var(--color-primary)' : 'var(--color-muted)',
+                fontWeight: isActive ? 700 : 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.9rem',
+              }}
+            >
+              <Icon /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Form Content */}
+      <form onSubmit={handleSave} className="glass-card" style={{ padding: '1.75rem' }}>
+        {activeTab === 'personal' && (
+          <div className="grid-responsive grid-col-2" style={{ gap: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Full Name *</label>
+              <input
+                type="text"
+                name="full_name"
+                value={formData.full_name}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: errors.full_name ? '1px solid #ef4444' : '1px solid #cbd5e1' }}
+              />
+              {errors.full_name && <span style={{ color: '#ef4444', fontSize: '0.75rem' }}>{errors.full_name}</span>}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Email Address *</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: errors.email ? '1px solid #ef4444' : '1px solid #cbd5e1' }}
+              />
+              {errors.email && <span style={{ color: '#ef4444', fontSize: '0.75rem' }}>{errors.email}</span>}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Phone Number *</label>
+              <input
+                type="text"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: errors.phone ? '1px solid #ef4444' : '1px solid #cbd5e1' }}
+              />
+              {errors.phone && <span style={{ color: '#ef4444', fontSize: '0.75rem' }}>{errors.phone}</span>}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Current Designation</label>
+              <input
+                type="text"
+                name="designation"
+                value={formData.designation}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'company' && (
+          <div className="grid-responsive grid-col-2" style={{ gap: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Company Name *</label>
+              <input
+                type="text"
+                name="company_name"
+                value={formData.company_name}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: errors.company_name ? '1px solid #ef4444' : '1px solid #cbd5e1' }}
+              />
+              {errors.company_name && <span style={{ color: '#ef4444', fontSize: '0.75rem' }}>{errors.company_name}</span>}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Company Website</label>
+              <input
+                type="url"
+                name="company_website"
+                value={formData.company_website}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Industry Domain</label>
+              <input
+                type="text"
+                name="industry"
+                value={formData.industry}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Company Size</label>
+              <select
+                name="company_size"
+                value={formData.company_size}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              >
+                <option value="1-10 Employees">1-10 Employees</option>
+                <option value="11-50 Employees">11-50 Employees</option>
+                <option value="50-200 Employees">50-200 Employees</option>
+                <option value="250-500 Employees">250-500 Employees</option>
+                <option value="500+ Employees">500+ Employees</option>
+              </select>
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Headquarters / Location</label>
+              <input
+                type="text"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'professional' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="grid-responsive grid-col-2" style={{ gap: '1.25rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Years of Experience</label>
+                <input
+                  type="number"
+                  name="experience_years"
+                  value={formData.experience_years}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Hiring Specialization</label>
+                <input
+                  type="text"
+                  name="specialization"
+                  value={formData.specialization}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Recruiter Bio & Overview</label>
+              <textarea
+                name="bio"
+                rows={4}
+                value={formData.bio}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'verification' && (
+          <div className="grid-responsive grid-col-2" style={{ gap: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Verification Badge Status</label>
+              <input
+                type="text"
+                disabled
+                value={formData.verification_status}
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', background: '#f1f5f9', border: '1px solid #cbd5e1', fontWeight: 700, color: '#149174' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>Corporate Tax ID / Registration</label>
+              <input
+                type="text"
+                name="tax_id"
+                value={formData.tax_id}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: '1.75rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+          <button type="button" onClick={loadProfile} className="btn btn-outline">
+            Reset Changes
+          </button>
+          <button type="submit" disabled={saving} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <FiSave /> {saving ? 'Saving...' : 'Save Profile'}
+          </button>
+        </div>
+      </form>
     </DashboardLayout>
   );
 };

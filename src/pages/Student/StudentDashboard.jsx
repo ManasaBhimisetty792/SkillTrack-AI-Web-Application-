@@ -14,7 +14,7 @@ import NotificationCard from '../../components/Dashboard/cards/NotificationCard'
 import ProfileCard from '../../components/Dashboard/cards/ProfileCard';
 import MembershipCard from '../../components/Dashboard/cards/MembershipCard';
 import { useAuth } from '../../hooks/useAuth';
-import '/src/components/Dashboard/dashboard.css';
+
 
 
 export const StudentDashboard = () => {

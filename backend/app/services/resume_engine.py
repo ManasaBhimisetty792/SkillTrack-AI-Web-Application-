@@ -42,7 +42,13 @@ import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from skills_db import SKILLS_DB, SOFT_SKILLS, SKILL_SYNONYMS, all_categories
+# from skills_db import SKILLS_DB, SOFT_SKILLS, SKILL_SYNONYMS, all_categories
+from app.services.skills_db import (
+    SKILLS_DB,
+    SOFT_SKILLS,
+    SKILL_SYNONYMS,
+    all_categories,
+)
 
 # ---------------------------------------------------------------------------
 # 1. LOAD THE PRETRAINED spaCy MODEL ONCE

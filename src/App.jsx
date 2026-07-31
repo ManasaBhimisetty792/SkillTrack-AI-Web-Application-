@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicLayout from './components/layout/PublicLayout';
+import ErrorBoundary from './components/ErrorBoundary';
 
 /* ── Public Pages (Lazy) ─────────────────────────────────────────── */
 const Home               = lazy(() => import('./pages/Home/Home'));
@@ -47,10 +48,14 @@ const RecruiterDashboard     = lazy(() => import('./pages/Recruiter/RecruiterDas
 const CompanyProfile         = lazy(() => import('./pages/Recruiter/CompanyProfile'));
 const JobPosts               = lazy(() => import('./pages/Recruiter/JobPosts'));
 const Candidates             = lazy(() => import('./pages/Recruiter/Candidates'));
+const Applications           = lazy(() => import('./pages/Recruiter/Applications'));
 const InterviewScheduling    = lazy(() => import('./pages/Recruiter/InterviewScheduling'));
+const RecruiterSchedule      = lazy(() => import('./pages/Recruiter/RecruiterSchedule'));
 const LiveInterviews         = lazy(() => import('./pages/Recruiter/LiveInterviews'));
 const ResumeScreening        = lazy(() => import('./pages/Recruiter/ResumeScreening'));
 const RecruiterAnalytics     = lazy(() => import('./pages/Recruiter/RecruiterAnalytics'));
+const RecruiterNotifications = lazy(() => import('./pages/Recruiter/RecruiterNotifications'));
+const Revenue                = lazy(() => import('./pages/Recruiter/Revenue'));
 const RecruiterBilling       = lazy(() => import('./pages/Recruiter/RecruiterBilling'));
 const RecruiterSettings      = lazy(() => import('./pages/Recruiter/RecruiterSettings'));
 
@@ -112,10 +117,11 @@ const App = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <div className="app-shell">
-          <Suspense fallback={<RouteLoader />}>
-            <AnimatePresence mode="wait">
-              <Routes location={location} key={location.pathname}>
+        <ErrorBoundary>
+          <div className="app-shell">
+            <Suspense fallback={<RouteLoader />}>
+              <AnimatePresence mode="wait">
+                <Routes location={location} key={location.pathname}>
 
               {/* ── Public Routes (with Navbar + Footer) ── */}
               <Route
@@ -213,14 +219,19 @@ const App = () => {
 
               {/* ── Recruiter Routes ── */}
               <Route path="/recruiter/dashboard"     element={<ProtectedRoute allowedRoles={['recruiter']}><RecruiterDashboard /></ProtectedRoute>} />
+              <Route path="/recruiter/profile"       element={<ProtectedRoute allowedRoles={['recruiter']}><CompanyProfile /></ProtectedRoute>} />
               <Route path="/recruiter/company"       element={<ProtectedRoute allowedRoles={['recruiter']}><CompanyProfile /></ProtectedRoute>} />
-              <Route path="/recruiter/jobs"          element={<ProtectedRoute allowedRoles={['recruiter']}><JobPosts /></ProtectedRoute>} />
               <Route path="/recruiter/candidates"    element={<ProtectedRoute allowedRoles={['recruiter']}><Candidates /></ProtectedRoute>} />
+              <Route path="/recruiter/jobs"          element={<ProtectedRoute allowedRoles={['recruiter']}><JobPosts /></ProtectedRoute>} />
+              <Route path="/recruiter/applications"  element={<ProtectedRoute allowedRoles={['recruiter']}><Applications /></ProtectedRoute>} />
               <Route path="/recruiter/interviews"    element={<ProtectedRoute allowedRoles={['recruiter']}><InterviewScheduling /></ProtectedRoute>} />
+              <Route path="/recruiter/schedule"      element={<ProtectedRoute allowedRoles={['recruiter']}><RecruiterSchedule /></ProtectedRoute>} />
+              <Route path="/recruiter/revenue"       element={<ProtectedRoute allowedRoles={['recruiter']}><Revenue /></ProtectedRoute>} />
+              <Route path="/recruiter/notifications" element={<ProtectedRoute allowedRoles={['recruiter']}><RecruiterNotifications /></ProtectedRoute>} />
               <Route path="/recruiter/live-interviews" element={<ProtectedRoute allowedRoles={['recruiter']}><LiveInterviews /></ProtectedRoute>} />
               <Route path="/recruiter/screening"     element={<ProtectedRoute allowedRoles={['recruiter']}><ResumeScreening /></ProtectedRoute>} />
               <Route path="/recruiter/analytics"     element={<ProtectedRoute allowedRoles={['recruiter']}><RecruiterAnalytics /></ProtectedRoute>} />
-              <Route path="/recruiter/billing"       element={<ProtectedRoute allowedRoles={['recruiter']}><RecruiterBilling /></ProtectedRoute>} />
+              <Route path="/recruiter/billing"       element={<ProtectedRoute allowedRoles={['recruiter']}><Revenue /></ProtectedRoute>} />
               <Route path="/recruiter/settings"      element={<ProtectedRoute allowedRoles={['recruiter']}><RecruiterSettings /></ProtectedRoute>} />
 
               {/* ── Admin Routes ── */}
@@ -269,9 +280,10 @@ const App = () => {
             </Routes>
           </AnimatePresence>
         </Suspense>
-      </div>
-    </AuthProvider>
-  </ThemeProvider>
+          </div>
+        </ErrorBoundary>
+      </AuthProvider>
+    </ThemeProvider>
 );
 };
 

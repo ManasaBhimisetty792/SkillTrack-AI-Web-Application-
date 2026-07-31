@@ -1,13 +1,43 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from app.services.razorpay_service import (
-    create_razorpay_order,
-    verify_payment_signature
-)
-from app.db.supabase_client import supabase
-from app.services.auth import get_current_user
 
+from app.services.razorpay_service import razorpay_service
+from app.database.supabase_client import supabase
+from app.middleware.auth_middleware import get_current_user
+
+
+from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException
+from app.middleware.auth_middleware import get_current_user
+from app.models.user import Profile
+
+from app.schemas.payment import (
+    CreateOrderRequest,
+    CreateOrderResponse,
+    VerifyPaymentRequest,
+    VerifyPaymentResponse,
+)
+
+from app.services.razorpay_service import razorpay_service
+from app.services.payment_service import payment_service
+from app.services.subscription_service import subscription_service
+
+router = APIRouter(
+    prefix="/payment",
+    tags=["Payment"]
+)
+
+@router.post("/webhook")
+async def razorpay_webhook(request: Request):
+
+    body = await request.body()
+
+    print(body)
+
+    return {
+        "success": True
+    }
 router = APIRouter()
 
 class CreateOrderRequest(BaseModel):
@@ -26,7 +56,10 @@ class VerifyPaymentRequest(BaseModel):
 async def create_order(request: CreateOrderRequest, user: dict = Depends(get_current_user)):
     """Create Razorpay order"""
     try:
-        order = create_razorpay_order(request.amount, request.currency)
+        order = razorpay_service.create_order(
+    amount=request.amount,
+    currency=request.currency
+)
         
         # Store pending transaction
         supabase.table("payment_history").insert({
@@ -46,7 +79,11 @@ async def create_order(request: CreateOrderRequest, user: dict = Depends(get_cur
 async def verify_payment(request: VerifyPaymentRequest, user: dict = Depends(get_current_user)):
     """Verify payment and activate subscription in candidate_profiles"""
     # Verify signature
-    is_valid = verify_payment_signature(request.order_id, request.payment_id, request.signature)
+    is_valid = razorpay_service.verify_signature(
+    order_id=request.order_id,
+    payment_id=request.payment_id,
+    signature=request.signature
+)
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid payment signature")
     

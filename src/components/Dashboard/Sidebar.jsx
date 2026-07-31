@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   FiGrid, FiUser, FiFileText, FiUploadCloud, FiBarChart2, FiVideo,
   FiAward, FiSettings, FiBell, FiCreditCard, FiBriefcase, FiUsers,
-  FiCalendar, FiShield, FiCheckCircle, FiLogOut, FiX, FiMenu, FiChevronRight, FiPieChart, FiDollarSign, FiSliders, FiLayers
+  FiCalendar, FiShield, FiCheckCircle, FiLogOut, FiX, FiMenu, FiChevronRight, FiPieChart, FiDollarSign, FiSliders, FiLayers, FiClock
 } from 'react-icons/fi';
 import { HiSparkles } from 'react-icons/hi';
 import { useAuth } from '../../context/AuthContext';
@@ -20,15 +20,16 @@ export const STUDENT_NAV = [
 ];
 
 export const RECRUITER_NAV = [
-  { label: 'Dashboard', path: '/recruiter/dashboard', icon: <FiGrid />, isFunctional: true },
-  { label: 'Company Profile', path: '/recruiter/company', icon: <FiBriefcase />, isFunctional: false },
-  { label: 'Job Posts', path: '/recruiter/jobs', icon: <FiFileText />, isFunctional: false },
-  { label: 'Candidates', path: '/recruiter/candidates', icon: <FiUsers />, isFunctional: false },
-  { label: 'Interviews', path: '/recruiter/interviews', icon: <FiCalendar />, isFunctional: false },
-  { label: 'Analytics', path: '/recruiter/analytics', icon: <FiBarChart2 />, isFunctional: false },
-  { label: 'Reports', path: '/recruiter/screening', icon: <FiPieChart />, isFunctional: false },
-  { label: 'Notifications', path: '/recruiter/billing', icon: <FiBell />, isFunctional: false },
-  { label: 'Settings', path: '/recruiter/settings', icon: <FiSettings />, isFunctional: false },
+  { label: 'Dashboard', path: '/recruiter/dashboard', icon: <FiGrid /> },
+  { label: 'Profile', path: '/recruiter/profile', icon: <FiUser /> },
+  { label: 'Candidates', path: '/recruiter/candidates', icon: <FiUsers /> },
+  { label: 'Jobs', path: '/recruiter/jobs', icon: <FiBriefcase /> },
+  { label: 'Applications', path: '/recruiter/applications', icon: <FiFileText /> },
+  { label: 'Interviews', path: '/recruiter/interviews', icon: <FiCalendar /> },
+  { label: 'Schedule', path: '/recruiter/schedule', icon: <FiClock /> },
+  { label: 'Revenue', path: '/recruiter/revenue', icon: <FiDollarSign /> },
+  { label: 'Notifications', path: '/recruiter/notifications', icon: <FiBell /> },
+  { label: 'Settings', path: '/recruiter/settings', icon: <FiSettings /> },
 ];
 
 export const ADMIN_NAV = [
@@ -100,7 +101,7 @@ export const Sidebar = ({ sidebarOpen, setSidebarOpen, mobileOpen, setMobileOpen
 
         <div className="sidebar-role-indicator">
           <span className={badgeInfo.color}>
-            {sidebarOpen ? badgeInfo.text : role[0].toUpperCase()}
+            {sidebarOpen ? badgeInfo.text : (role && typeof role === 'string' && role.length ? role[0].toUpperCase() : 'S')}
           </span>
         </div>
 

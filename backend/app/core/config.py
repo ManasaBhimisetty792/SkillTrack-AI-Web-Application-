@@ -17,12 +17,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./skilltrack.db"
 
     SUPABASE_URL: str = "https://your-supabase-project.supabase.co"
-    SUPABASE_SERVICE_ROLE_KEY: str = ""
-    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxb2FnYnplamRhcGxlZmp2eG5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5OTc0ODgsImV4cCI6MjEwMDU3MzQ4OH0.CYzabpcKnJ46JaBVmyTOMbg5gttEb8jxQzTcMcUFDp8"
+    SUPABASE_ANON_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxb2FnYnplamRhcGxlZmp2eG5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5OTc0ODgsImV4cCI6MjEwMDU3MzQ4OH0.CYzabpcKnJ46JaBVmyTOMbg5gttEb8jxQzTcMcUFDp8"
 
-    RAZORPAY_KEY_ID: str = "rzp_test_placeholder"
-    RAZORPAY_KEY_SECRET: str = "razorpay_secret_placeholder"
-    RAZORPAY_WEBHOOK_SECRET: str = "razorpay_webhook_secret_placeholder"
+    RAZORPAY_KEY_ID: str = "rzp_test_TK5SkXFb1fsSwg"
+    RAZORPAY_KEY_SECRET: str = "AF5gdqC2b295I428dTz604Z9"
+    RAZORPAY_WEBHOOK_SECRET: str = "razorpay_webhook_secret"
 
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",

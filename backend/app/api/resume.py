@@ -3,73 +3,108 @@ resume.py — FastAPI router for resume analysis
 POST /api/v1/resume/analyze
 """
 
-from fastapi import APIRouter, File, Form, UploadFile, HTTPException, status
-from fastapi.responses import JSONResponse
+import os
+import tempfile
 from typing import Optional
 
-from app.services.resume_engine import analyze, load_document_bytes
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    UploadFile,
+    HTTPException,
+    status,
+)
+from fastapi.responses import JSONResponse
 
-router = APIRouter(prefix="/resume", tags=["Resume Analysis"])
+from app.services.resume_engine import analyze, load_document
+
+router = APIRouter(
+    prefix="/resume",
+    tags=["Resume Analysis"],
+)
+
+
+def save_upload_file(upload_file: UploadFile) -> str:
+    """
+    Save UploadFile to a temporary file and return its path.
+    """
+    suffix = os.path.splitext(upload_file.filename or "")[1]
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+        temp.write(upload_file.file.read())
+        temp_path = temp.name
+
+    return temp_path
 
 
 @router.post("/analyze")
 async def analyze_resume(
-    resume_file: UploadFile = File(..., description="Candidate resume — PDF or DOCX"),
-    jd_text: Optional[str] = Form(None, description="Job description pasted as plain text"),
-    jd_file: Optional[UploadFile] = File(None, description="Job description file — PDF or DOCX"),
+    resume_file: UploadFile = File(...),
+    jd_text: Optional[str] = Form(None),
+    jd_file: Optional[UploadFile] = File(None),
 ):
     """
-    Analyse a resume against a job description.
+    Analyze Resume against Job Description.
     """
-    allowed_types = {
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "text/plain"
-    }
 
     if not jd_text and not jd_file:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Provide a job description via jd_text or jd_file.",
+            detail="Provide either jd_text or jd_file."
         )
+
+    resume_path = None
+    jd_path = None
 
     try:
-        resume_bytes = await resume_file.read()
-        resume_text = load_document_bytes(resume_bytes, resume_file.filename or "resume.pdf")
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Could not parse resume file: {exc}",
-        )
+        # -------------------------------
+        # Resume
+        # -------------------------------
+        resume_path = save_upload_file(resume_file)
+        resume_text = load_document(resume_path)
 
-    if not resume_text.strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Resume file appears to be empty or unreadable.",
-        )
-
-    if jd_file:
-        try:
-            jd_bytes = await jd_file.read()
-            jd_text = load_document_bytes(jd_bytes, jd_file.filename or "jd.pdf")
-        except Exception as exc:
+        if not resume_text.strip():
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Could not parse JD file: {exc}",
+                status_code=422,
+                detail="Resume file is empty."
             )
 
-    if not jd_text or not jd_text.strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Job description is empty — please provide valid content.",
-        )
+        # -------------------------------
+        # Job Description
+        # -------------------------------
+        if jd_file:
+            jd_path = save_upload_file(jd_file)
+            jd_text = load_document(jd_path)
 
-    try:
+        if not jd_text or not jd_text.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="Job Description is empty."
+            )
+
+        # -------------------------------
+        # AI Analysis
+        # -------------------------------
         result = analyze(resume_text, jd_text)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Analysis engine error: {exc}",
+
+        return JSONResponse(
+            status_code=200,
+            content=result.to_dict()
         )
 
-    return JSONResponse(content=result.to_dict())
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Resume analysis failed: {str(e)}"
+        )
+
+    finally:
+        if resume_path and os.path.exists(resume_path):
+            os.remove(resume_path)
+
+        if jd_path and os.path.exists(jd_path):
+            os.remove(jd_path)

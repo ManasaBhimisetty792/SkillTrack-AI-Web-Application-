@@ -22,8 +22,13 @@ export const tokenStorage = {
     return localStorage.getItem(STORAGE_KEYS.refresh);
   },
   get user() {
-    const raw = localStorage.getItem(STORAGE_KEYS.user);
-    return raw ? JSON.parse(raw) : null;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.user);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      console.warn('Failed to parse st_user from localStorage:', e);
+      return null;
+    }
   },
   set({ access, refresh, user }) {
     if (access) localStorage.setItem(STORAGE_KEYS.access, access);
