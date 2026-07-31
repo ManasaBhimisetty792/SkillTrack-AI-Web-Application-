@@ -157,7 +157,7 @@
 
 /* Topbar Styling */
 .dashboard-topbar {
-  height: 100px !important;
+  height: 80px !important;
    padding: 0 2rem;
   position: sticky;
   top: 0;

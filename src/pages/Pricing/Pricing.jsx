@@ -157,7 +157,7 @@ export const Pricing = () => {
                 </p>
 
                 <div className="pricing-card__price-row">
-                  <span className="price-amount--premium">₹1,499</span>
+                  <span className="price-amount--premium">₹999</span>
                   <span className="price-period--premium">/ year</span>
                 </div>
               </div>
@@ -198,7 +198,7 @@ export const Pricing = () => {
                     👑 You are Premium (Go to Dashboard)
                   </button>
                 ) : (
-                  <RazorpayCheckout planName="Student Premium" amount={1499}>
+                  <RazorpayCheckout planName="Student Premium" amount={999}>
                     <button className="btn-plan-upgrade-premium">
                       Upgrade to Premium <FiArrowRight />
                     </button>

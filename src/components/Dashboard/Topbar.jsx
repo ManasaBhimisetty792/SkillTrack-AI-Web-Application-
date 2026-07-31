@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import Breadcrumb from './cards/Breadcrumb';
 import ThemeToggle from '../common/ThemeToggle';
 
+
 export const Topbar = ({ title, onMenuToggle }) => {
   const { user, role, logout, switchRole } = useAuth();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
