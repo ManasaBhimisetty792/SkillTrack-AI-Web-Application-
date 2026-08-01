@@ -11,7 +11,7 @@ import './studentReports.css';
 
 export const StudentReports = () => {
   const handleExportPDF = () => {
-    toast.success('🎉 Generating AI Career Growth Report PDF...');
+    toast.success(' Generating AI Career Growth Report PDF...');
   };
 
   return (

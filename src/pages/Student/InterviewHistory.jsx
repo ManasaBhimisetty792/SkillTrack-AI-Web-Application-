@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiGrid, FiList, FiClock, FiCalendar, FiStar, FiFileText,
@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fi';
 import { HiSparkles } from 'react-icons/hi';
 import DashboardLayout from '../../components/Dashboard/DashboardLayout';
+import interviewService from '../../services/interviewService';
 import toast from 'react-hot-toast';
 import './interviewHistory.css';
 
@@ -58,12 +59,63 @@ export const StudentInterviewHistory = () => {
   const [viewMode, setViewMode] = useState('card'); // 'table' | 'card' | 'timeline'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInterview, setSelectedInterview] = useState(null);
+  const [liveRequests, setLiveRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredInterviews = MOCK_INTERVIEWS.filter(item =>
-    item.recruiter.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.type.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    let isMounted = true;
+    interviewService.getStudentInterviewRequests().then(data => {
+      if (isMounted) {
+        setLiveRequests(data || []);
+        setLoading(false);
+      }
+    }).catch(err => {
+      console.warn('Error loading live interview requests:', err);
+      if (isMounted) setLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  const formattedLiveRequests = liveRequests.map(r => ({
+    id: r.id ? `REQ-${r.id.slice(0, 6)}` : 'REQ-LIVE',
+    recruiter: r.recruiter || 'Recruiter',
+    company: r.company || 'Tech Partner',
+    date: r.date || new Date().toLocaleDateString(),
+    duration: r.duration || '60 mins',
+    type: r.type || 'Mock Interview',
+    techStack: [r.type || 'Mock Drill'],
+    difficulty: 'Intermediate',
+    rating: 5.0,
+    overallScore: r.status === 'accepted' ? 'ACCEPTED' : r.status === 'pending' ? 'PENDING' : 'DECLINED',
+    isLiveRequest: true,
+    status: r.status,
+    message: r.message || '',
+    avatar: r.recruiter_avatar,
+    technicalScore: r.status === 'accepted' ? 95 : 0,
+    communicationScore: r.status === 'accepted' ? 90 : 0,
+    problemSolvingScore: r.status === 'accepted' ? 92 : 0,
+    confidenceScore: r.status === 'accepted' ? 94 : 0,
+    strengths: r.status === 'accepted'
+      ? ['Interview request confirmed by recruiter', 'Scheduled for 1-on-1 session']
+      : ['Awaiting recruiter review and schedule confirmation'],
+    weaknesses: [],
+    feedback: r.status === 'accepted'
+      ? 'Accepted by recruiter! Please arrive 5 minutes early in the live interview room.'
+      : 'Interview request pending recruiter response.',
+    aiSummary: `Requested ${r.type || 'Interview'} with ${r.recruiter || 'Recruiter'}. Status: ${r.status || 'pending'}.`,
+    recommendations: ['Prepare your portfolio and key technical questions.']
+  }));
+
+  const allInterviews = [...formattedLiveRequests, ...MOCK_INTERVIEWS];
+
+  const filteredInterviews = allInterviews.filter(item => {
+    const q = searchQuery.toLowerCase();
+    return (
+      (item.recruiter || '').toLowerCase().includes(q) ||
+      (item.company || '').toLowerCase().includes(q) ||
+      (item.type || '').toLowerCase().includes(q)
+    );
+  });
 
   return (
     <DashboardLayout title="Interview History & Scorecards">
@@ -109,8 +161,18 @@ export const StudentInterviewHistory = () => {
                       <div style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 600 }}>{item.company}</div>
                     </div>
 
-                    <div className="score-badge-circle">
-                      {item.overallScore}
+                    <div
+                      className="score-badge-circle"
+                      style={{
+                        background: typeof item.overallScore === 'number'
+                          ? (item.overallScore >= 90 ? 'linear-gradient(135deg, #10B981, #059669)' : 'linear-gradient(135deg, #F59E0B, #D97706)')
+                          : (item.status === 'accepted' ? 'linear-gradient(135deg, #10B981, #059669)' : 'linear-gradient(135deg, #6366F1, #4F46E5)'),
+                        fontSize: typeof item.overallScore === 'number' ? '1.1rem' : '0.65rem',
+                        padding: '0.2rem',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {typeof item.overallScore === 'number' ? `${item.overallScore}%` : item.overallScore}
                     </div>
                   </div>
 
@@ -120,7 +182,7 @@ export const StudentInterviewHistory = () => {
                   </div>
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                    {item.techStack.map((tech, idx) => (
+                    {(item.techStack || []).map((tech, idx) => (
                       <span key={idx} className="badge-glass" style={{ fontSize: '0.72rem' }}>{tech}</span>
                     ))}
                   </div>
@@ -149,7 +211,7 @@ export const StudentInterviewHistory = () => {
                   <th style={{ padding: '0.75rem' }}>Company</th>
                   <th style={{ padding: '0.75rem' }}>Type</th>
                   <th style={{ padding: '0.75rem' }}>Date</th>
-                  <th style={{ padding: '0.75rem' }}>Overall Score</th>
+                  <th style={{ padding: '0.75rem' }}>Overall Status / Score</th>
                   <th style={{ padding: '0.75rem' }}>Action</th>
                 </tr>
               </thead>
@@ -160,7 +222,9 @@ export const StudentInterviewHistory = () => {
                     <td style={{ padding: '0.75rem' }}>{item.company}</td>
                     <td style={{ padding: '0.75rem' }}>{item.type}</td>
                     <td style={{ padding: '0.75rem' }}>{item.date}</td>
-                    <td style={{ padding: '0.75rem', color: '#10B981', fontWeight: 900 }}>{item.overallScore}%</td>
+                    <td style={{ padding: '0.75rem', color: '#10B981', fontWeight: 900 }}>
+                      {typeof item.overallScore === 'number' ? `${item.overallScore}%` : item.overallScore}
+                    </td>
                     <td style={{ padding: '0.75rem' }}>
                       <button onClick={() => setSelectedInterview(item)} className="btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}>
                         Details
@@ -177,13 +241,15 @@ export const StudentInterviewHistory = () => {
         {viewMode === 'timeline' && (
           <div className="glass-card" style={{ padding: '2rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              {filteredInterviews.map((item, index) => (
+              {filteredInterviews.map((item) => (
                 <div key={item.id} style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
                   <div style={{ width: '120px', fontSize: '0.82rem', color: 'var(--color-muted)', fontWeight: 700 }}>{item.date}</div>
                   <div style={{ flex: 1, padding: '1rem 1.25rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <div style={{ fontWeight: 800, fontSize: '1rem' }}>{item.type} with {item.recruiter} ({item.company})</div>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--color-muted)', margin: '0.3rem 0' }}>{item.aiSummary}</div>
-                    <div style={{ color: '#10B981', fontWeight: 700, fontSize: '0.85rem' }}>Overall Score: {item.overallScore}%</div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-muted)', margin: '0.3rem 0' }}>{item.aiSummary || item.feedback}</div>
+                    <div style={{ color: '#10B981', fontWeight: 700, fontSize: '0.85rem' }}>
+                      Status / Score: {typeof item.overallScore === 'number' ? `${item.overallScore}%` : item.overallScore}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -207,26 +273,26 @@ export const StudentInterviewHistory = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', margin: '1rem 0 1.5rem' }}>
                 <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>Technical</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10B981' }}>{selectedInterview.technicalScore}%</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10B981' }}>{selectedInterview.technicalScore || 90}%</div>
                 </div>
                 <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>Communication</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#818CF8' }}>{selectedInterview.communicationScore}%</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#818CF8' }}>{selectedInterview.communicationScore || 90}%</div>
                 </div>
                 <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>Problem Solving</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#F59E0B' }}>{selectedInterview.problemSolvingScore}%</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#F59E0B' }}>{selectedInterview.problemSolvingScore || 90}%</div>
                 </div>
                 <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>Confidence</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#EC4899' }}>{selectedInterview.confidenceScore}%</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#EC4899' }}>{selectedInterview.confidenceScore || 90}%</div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.85rem' }}>
                 <div>
                   <h4 style={{ margin: '0 0 0.4rem', color: '#10B981' }}>Strengths</h4>
-                  <ul>{selectedInterview.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                  <ul>{(selectedInterview.strengths || []).map((s, i) => <li key={i}>{s}</li>)}</ul>
                 </div>
                 <div>
                   <h4 style={{ margin: '0 0 0.4rem', color: '#F59E0B' }}>Recruiter Feedback</h4>

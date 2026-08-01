@@ -41,6 +41,7 @@ class CandidateProfile(Base):
     profile_completion_pct = Column(Integer, default=0)
     website = Column(String, nullable=True)
     linkedin_url = Column(String, nullable=True)
+    skills = Column(String, nullable=True)  # Comma-separated or JSON string
     updated_at = Column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
@@ -57,6 +58,12 @@ class RecruiterProfile(Base):
     location = Column(String, nullable=True)
     bio = Column(String, nullable=True)
     company = Column(String, nullable=True)
+    designation = Column(String, nullable=True)
+    experience_years = Column(Integer, default=5)
+    specialization = Column(String, nullable=True)
+    company_logo = Column(String, nullable=True)
+    avatar_url = Column(String, nullable=True)
+    skills = Column(String, nullable=True)  # Comma-separated or JSON string
     approval_status = Column(String, default="pending")
     is_approved = Column(Boolean, default=False)
     linkedin_url = Column(String, nullable=True)
@@ -66,3 +73,4 @@ class RecruiterProfile(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+

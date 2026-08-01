@@ -10,6 +10,7 @@ from app.api.auth import router as auth_router
 from app.api.payment_routes import router as payments_router
 from app.api.resume import router as resume_router
 from app.api.recruiter import router as recruiter_router
+from app.api.notifications import router as notifications_router
 from app.database.session import engine
 from app.models.user import Base
 from app.models.payment import Payment          # noqa: F401
@@ -67,6 +68,7 @@ app.include_router(payments_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
 app.include_router(resume_router, prefix="/api/v1")
 app.include_router(recruiter_router, prefix="/api/v1")
+app.include_router(notifications_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn

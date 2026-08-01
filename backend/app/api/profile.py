@@ -14,6 +14,7 @@ class CandidateProfileUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     avatar_url: Optional[str] = None
+    username: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
     bio: Optional[str] = None
@@ -25,18 +26,27 @@ class CandidateProfileUpdate(BaseModel):
     profile_completion_pct: Optional[int] = None
     website: Optional[str] = None
     linkedin_url: Optional[str] = None
+    skills: Optional[List[str]] = None
 
 
 class RecruiterProfileUpdate(BaseModel):
+    name: Optional[str] = None
     username: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
     bio: Optional[str] = None
     company: Optional[str] = None
+    designation: Optional[str] = None
+    experience_years: Optional[int] = None
+    specialization: Optional[str] = None
+    company_logo: Optional[str] = None
+    avatar_url: Optional[str] = None
+    skills: Optional[List[str]] = None
     approval_status: Optional[str] = None
     is_approved: Optional[bool] = None
     linkedin_url: Optional[str] = None
     website: Optional[str] = None
+
 
 
 @router.get("/me")
