@@ -2,7 +2,6 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import usePayment from '../../hooks/usePayment';
 import LoadingPayment from './LoadingPayment';
-import MockPaymentModal from './MockPaymentModal';
 
 const CheckoutButton = ({
   planKey = 'student_premium',
@@ -14,10 +13,6 @@ const CheckoutButton = ({
     initiatePayment,
     isLoading,
     status,
-    showMockModal,
-    mockOrderInfo,
-    handleConfirmMockPayment,
-    handleCloseMockModal,
   } = usePayment();
 
   const baseStyles = "relative px-6 py-3.5 rounded-xl font-semibold transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden shadow-lg shadow-indigo-500/25 cursor-pointer";
@@ -30,15 +25,7 @@ const CheckoutButton = ({
 
   return (
     <>
-      {isLoading && <LoadingPayment message={status === 'verifying' ? 'Verifying payment with gateway...' : 'Initializing checkout environment...'} />}
-
-      <MockPaymentModal
-        isOpen={showMockModal}
-        onClose={handleCloseMockModal}
-        onConfirmPay={handleConfirmMockPayment}
-        planDetails={mockOrderInfo?.plan}
-        userDetails={mockOrderInfo?.user}
-      />
+      {isLoading && <LoadingPayment message={status === 'verifying' ? 'Verifying payment with gateway...' : 'Opening Razorpay Checkout...'} />}
 
       <motion.button
         whileHover={{ scale: 1.02 }}
@@ -59,3 +46,4 @@ const CheckoutButton = ({
 };
 
 export default CheckoutButton;
+

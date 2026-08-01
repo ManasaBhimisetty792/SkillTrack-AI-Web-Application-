@@ -149,30 +149,63 @@ export const paymentService = {
     const invoiceNo = `INV-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random()*9000)}`;
 
     if (isSupabaseConfigured() && userId) {
+      const now = new Date();
+      const endDate = new Date();
+      endDate.setFullYear(now.getFullYear() + 1);
+
+      // 1. Try inserting payment record into student_payments / payment_history
       try {
-        // Insert payment_history record (matches your schema)
-        await supabase.from('payment_history').insert({
-          candidate_id: userId,
-          razorpay_order_id: orderId,
-          razorpay_payment_id: paymentId || `pay_${Date.now()}`,
-          razorpay_signature: signature || 'sig_demo',
-          amount: amount * 100, // Store in paise
+        await supabase.from('student_payments').insert({
+          user_id: userId,
+          order_id: orderId || `order_${Date.now()}`,
+          payment_id: paymentId || `pay_${Date.now()}`,
+          signature: signature || 'sig_demo',
+          amount: amount,
           currency: 'INR',
-          status: isSuccess ? 'captured' : 'failed',
           plan_name: planName,
-          created_at: new Date().toISOString(),
+          payment_status: isSuccess ? 'success' : 'failed',
+          invoice_number: invoiceNo,
+          created_at: now.toISOString(),
         });
+      } catch (pErr1) {
+        try {
+          await supabase.from('payment_history').insert({
+            candidate_id: userId,
+            razorpay_order_id: orderId || `order_${Date.now()}`,
+            razorpay_payment_id: paymentId || `pay_${Date.now()}`,
+            razorpay_signature: signature || 'sig_demo',
+            amount: amount * 100,
+            currency: 'INR',
+            status: isSuccess ? 'captured' : 'failed',
+            plan_name: planName,
+            created_at: now.toISOString(),
+          });
+        } catch (pErr2) {
+          console.warn('Payment table insert fallback warning:', pErr2.message);
+        }
+      }
 
-        if (isSuccess) {
-          // Update candidate_profiles to Premium
-          const now = new Date();
-          const endDate = new Date();
-          endDate.setFullYear(now.getFullYear() + 1);
+      // 2. Persist Premium Membership to public.profiles and candidate_profiles
+      if (isSuccess) {
+        try {
+          await supabase.from('profiles').update({
+            is_premium: true,
+            membership_type: 'premium',
+            current_plan: planName,
+            subscription_status: 'active',
+            premium_start_date: now.toISOString(),
+            premium_end_date: endDate.toISOString(),
+            updated_at: now.toISOString(),
+          }).eq('id', userId);
+        } catch (profErr) {
+          console.warn('profiles update warning:', profErr.message);
+        }
 
+        try {
           await supabase.from('candidate_profiles').update({
             is_premium: true,
             membership_type: 'premium',
-            current_plan: 'premium',
+            current_plan: planName,
             subscription_status: 'active',
             subscription_plan_id: planName.toLowerCase(),
             subscription_start_date: now.toISOString(),
@@ -182,9 +215,9 @@ export const paymentService = {
             last_payment_date: now.toISOString(),
             updated_at: now.toISOString(),
           }).eq('id', userId);
+        } catch (candErr) {
+          console.warn('candidate_profiles update warning:', candErr.message);
         }
-      } catch (err) {
-        console.error('Error persisting payment to Supabase:', err.message);
       }
     }
 

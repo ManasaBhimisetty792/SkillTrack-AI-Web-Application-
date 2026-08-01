@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {  FiBell, FiMenu, FiUser, FiLogOut, FiShield, FiBriefcase, FiChevronDown } from 'react-icons/fi';
+import { FiBell, FiMenu, FiUser, FiLogOut, FiShield, FiBriefcase, FiChevronDown, FiAward, FiZap } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
 import Breadcrumb from './cards/Breadcrumb';
 import ThemeToggle from '../common/ThemeToggle';
-
 
 export const Topbar = ({ title, onMenuToggle }) => {
   const { user, role, logout, switchRole } = useAuth();
@@ -16,6 +15,13 @@ export const Topbar = ({ title, onMenuToggle }) => {
     await logout();
     navigate('/login');
   };
+
+  const isPremium = Boolean(
+    user?.is_premium ||
+    user?.membership_type === 'premium' ||
+    user?.current_plan === 'Student Premium' ||
+    user?.current_plan === 'premium'
+  );
 
   return (
     <header className="dashboard-topbar glass-panel">
@@ -33,34 +39,21 @@ export const Topbar = ({ title, onMenuToggle }) => {
         </div>
       </div>
 
-      {/* <div className="topbar-search">
-        <FiSearch className="search-icon" aria-hidden="true" />
-        <input
-          type="text"
-          placeholder="Search resumes, candidates, drills..."
-          className="input-glass search-input"
-          aria-label="Global search input"
-        />
-      </div> */}
-
       <div className="topbar-actions">
-        {/* Role Switcher Demo Control */}
-        {/* <div className="demo-role-switcher">
-          <select
-            value={role}
-            onChange={(e) => {
-              const targetRole = e.target.value;
-              switchRole(targetRole);
-              navigate(`/${targetRole}/dashboard`);
-            }}
-            className="input-glass role-select-sm"
-            aria-label="Switch active demo role"
-          >
-            <option value="student">Student Portal</option>
-            <option value="recruiter">Recruiter Portal</option>
-            <option value="admin">Admin Portal</option>
-          </select>
-        </div> */}
+        {/* Student Membership Status Tag (Free User / Premium User) */}
+        {role === 'student' && (
+          <div className="topbar-membership-tag">
+            {isPremium ? (
+              <span className="membership-pill premium" title="Premium Membership Active">
+                <FiAward className="pill-icon" /> Premium User
+              </span>
+            ) : (
+              <span className="membership-pill free" title="Free Account Plan">
+                <FiZap className="pill-icon" /> Free User
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Notifications Icon */}
         <Link
@@ -90,8 +83,13 @@ export const Topbar = ({ title, onMenuToggle }) => {
               className="avatar-img"
             />
             <div className="user-details-sm">
-  <span className="user-name-sm">{user?.name || 'Alex Johnson'}</span>
-</div>
+              <span className="user-name-sm">{user?.name || 'Alex Johnson'}</span>
+              {role === 'student' && (
+                <span className="user-role-sm">
+                  {isPremium ? '★ Premium' : 'Free Plan'}
+                </span>
+              )}
+            </div>
             <FiChevronDown style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }} />
           </button>
 
@@ -100,9 +98,14 @@ export const Topbar = ({ title, onMenuToggle }) => {
               <div className="dropdown-header">
                 <p className="dropdown-user-name">{user?.name || 'Alex Johnson'}</p>
                 <p className="dropdown-user-email">{user?.email || 'alex@skilltrack.ai'}</p>
-                <span className="badge-glass" style={{ fontSize: '0.68rem', marginTop: '0.25rem', display: 'inline-block' }}>
-                  {role?.toUpperCase()}
-                </span>
+                <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <span className="badge-glass" style={{ fontSize: '0.68rem' }}>
+                    {role?.toUpperCase()}
+                  </span>
+                  <span className={`membership-pill ${isPremium ? 'premium' : 'free'}`} style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}>
+                    {isPremium ? '👑 Premium' : '⚡ Free'}
+                  </span>
+                </div>
               </div>
               <div className="dropdown-divider" />
               <Link
@@ -126,4 +129,5 @@ export const Topbar = ({ title, onMenuToggle }) => {
   );
 };
 
-export default Topbar; 
+export default Topbar;
+ 

@@ -34,6 +34,17 @@ CREATE TABLE IF NOT EXISTS public.candidate_profiles (
   profile_completion_pct INTEGER DEFAULT 0,
   website TEXT,
   linkedin_url TEXT,
+  -- Premium Membership & Payment Tracking Columns
+  is_premium BOOLEAN DEFAULT FALSE,
+  membership_type TEXT DEFAULT 'free',
+  current_plan TEXT DEFAULT 'Free Plan',
+  subscription_status TEXT DEFAULT 'inactive',
+  subscription_plan_id TEXT,
+  subscription_start_date TIMESTAMPTZ,
+  subscription_end_date TIMESTAMPTZ,
+  billing_cycle TEXT DEFAULT 'yearly',
+  last_payment_id TEXT,
+  last_payment_date TIMESTAMPTZ,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

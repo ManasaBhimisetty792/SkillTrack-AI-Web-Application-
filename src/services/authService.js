@@ -239,6 +239,25 @@ export const authService = {
           }
         }
 
+        const isPremium = Boolean(
+          profileData?.is_premium ||
+          roleProfile?.is_premium ||
+          user.user_metadata?.is_premium ||
+          localUser?.is_premium
+        );
+        const membershipType =
+          profileData?.membership_type ||
+          roleProfile?.membership_type ||
+          (isPremium ? 'premium' : 'free');
+        const currentPlan =
+          profileData?.current_plan ||
+          roleProfile?.current_plan ||
+          (isPremium ? 'Student Premium' : 'Free Plan');
+        const subStatus =
+          profileData?.subscription_status ||
+          roleProfile?.subscription_status ||
+          (isPremium ? 'active' : 'inactive');
+
         const formattedUser = {
           id: user.id,
           email: user.email,
@@ -252,6 +271,11 @@ export const authService = {
           website: roleProfile?.website || '',
           bio: roleProfile?.bio || '',
           location: roleProfile?.location || '',
+          // Premium Membership fields from Supabase
+          is_premium: isPremium,
+          membership_type: membershipType,
+          current_plan: currentPlan,
+          subscription_status: subStatus,
           // Recruiter-specific
           company: roleProfile?.company || user.user_metadata?.company || '',
           approval_status: roleProfile?.approval_status || (role === 'recruiter' ? 'pending' : 'approved'),
@@ -260,7 +284,7 @@ export const authService = {
           created_at: profileData?.updated_at || user.created_at,
           updated_at: profileData?.updated_at || user.created_at,
         };
-        tokenStorage.set({ user: formattedUser });
+        tokenStorage.set({ user: formattedUser, access: tokenStorage.access });
         return formattedUser;
       } catch (err) {
         console.warn('getCurrentUser error:', err.message);

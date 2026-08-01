@@ -289,7 +289,44 @@
   gap: 1rem;
 }
 
+/* Topbar Membership Tag */
+.topbar-membership-tag {
+  display: flex;
+  align-items: center;
+}
+
+.membership-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.membership-pill .pill-icon {
+  font-size: 0.85rem;
+}
+
+.membership-pill.premium {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(99, 102, 241, 0.22));
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+}
+
+.membership-pill.free {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
 .demo-role-switcher .role-select-sm {
+
   padding: 0.4rem 0.75rem;
   font-size: 0.78rem;
   font-weight: 600;
