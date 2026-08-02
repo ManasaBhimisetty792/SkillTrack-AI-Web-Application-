@@ -34,13 +34,28 @@ export const RecruiterNotifications = () => {
 
   const handleResponse = async (requestId, action, studentUserId) => {
     try {
-      await recruiterService.respondToInterviewRequest(requestId, action, studentUserId);
-      toast.success(`Request ${action} successfully!`);
+      const req = requests.find(r => r.id === requestId);
+      const recruiterName = 'Recruiter'; // can be pulled from auth context if needed
+
+      if (action === 'accepted') {
+        await recruiterService.acceptInterviewRequest(requestId, studentUserId, recruiterName);
+        toast.success('✅ Interview accepted! Meeting link generated and student notified.');
+      } else if (action === 'rejected') {
+        await recruiterService.rejectOrRescheduleRequest(requestId, studentUserId, {
+          action: 'reject',
+          rejectReason: '',
+          recruiterName,
+        });
+        toast.error('❌ Request declined. Student has been notified.');
+      }
+
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: action } : r));
     } catch (err) {
-      toast.error('Failed to respond to request.');
+      console.error('handleResponse error:', err);
+      toast.error('Failed to process request.');
     }
   };
+
 
   const handleMarkAllRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));

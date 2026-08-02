@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
-  FiUser, FiBriefcase, FiMail, FiPhone, FiGlobe, FiMapPin,
-  FiAward, FiCheckCircle, FiShield, FiSave, FiAlertCircle, FiCamera, FiEdit3
+  FiUser,
+  FiBriefcase,
+  FiSave,
+  FiAlertCircle,
+  FiCamera,
+  FiCheckCircle,
+  FiShield,
+  FiAward,
 } from 'react-icons/fi';
 import DashboardLayout from '../../components/Dashboard/DashboardLayout';
 import recruiterService from '../../services/recruiterService';
-import {supabase} from "../../services/supabaseClient";
+import { supabase } from '../../services/supabaseClient';
 
 export const CompanyProfile = () => {
   const [activeTab, setActiveTab] = useState('personal');
@@ -26,12 +32,17 @@ export const CompanyProfile = () => {
     industry: '',
     company_size: '',
     location: '',
-    experience_years: 5,
+    experience_years: 0,
     specialization: '',
     bio: '',
     verification_status: 'Verified',
     tax_id: '',
   });
+
+  const showToast = (type, message) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const loadProfile = async () => {
     setLoading(true);
@@ -43,14 +54,14 @@ export const CompanyProfile = () => {
           email: data.email || '',
           phone: data.phone || '',
           designation: data.designation || '',
-          avatar_url: data.avatar_url || 'https://i.pravatar.cc/120?img=68',
+          avatar_url: data.avatar_url || '',
           company_name: data.company_name || '',
           company_logo: data.company_logo || '',
           company_website: data.company_website || '',
           industry: data.industry || '',
           company_size: data.company_size || '',
           location: data.location || '',
-          experience_years: data.experience_years || 5,
+          experience_years: Number(data.experience_years || 0),
           specialization: data.specialization || '',
           bio: data.bio || '',
           verification_status: data.verification_status || 'Verified',
@@ -58,6 +69,7 @@ export const CompanyProfile = () => {
         });
       }
     } catch (err) {
+      console.error(err);
       showToast('error', 'Failed to load recruiter profile data');
     } finally {
       setLoading(false);
@@ -67,11 +79,6 @@ export const CompanyProfile = () => {
   useEffect(() => {
     loadProfile();
   }, []);
-
-  const showToast = (type, message) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
-  };
 
   const validate = () => {
     const errs = {};
@@ -85,51 +92,83 @@ export const CompanyProfile = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'experience_years' ? Number(value) : value,
+    }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
   const handleImageUpload = async (e) => {
-  const file = e.target.files?.[0];
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  if (!file) return;
-
-  try {
-    const { data: userData } = await supabase.auth.getUser();
-
-    if (!userData?.user) {
-      showToast("error", "Please login again.");
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      showToast('error', 'Please upload a JPG, PNG, or WEBP image.');
+      e.target.value = '';
       return;
     }
 
-    const fileExt = file.name.split(".").pop();
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('error', 'Image must be smaller than 5 MB.');
+      e.target.value = '';
+      return;
+    }
 
-    const fileName =
-      `${userData.user.id}-${Date.now()}.${fileExt}`;
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
 
-    const { error } = await supabase.storage
-      .from("profile_images")
-      .upload(fileName, file, {
-        upsert: true,
-      });
+      const user = authData?.user;
+      if (!user) {
+        showToast('error', 'Please login again.');
+        return;
+      }
 
-    if (error) throw error;
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const filePath = `${user.id}/avatar-${Date.now()}.${fileExt}`;
 
-    const { data } = supabase.storage
-      .from("profile_images")
-      .getPublicUrl(fileName);
+      const { error: uploadError } = await supabase.storage
+        .from('profile_images')
+        .upload(filePath, file, {
+          upsert: true,
+          cacheControl: '3600',
+          contentType: file.type,
+        });
 
-    setFormData((prev) => ({
-      ...prev,
-      avatar_url: data.publicUrl,
-    }));
+      if (uploadError) throw uploadError;
 
-    showToast("success", "Profile photo uploaded.");
-  } catch (err) {
-    console.error(err);
-    showToast("error", err.message);
-  }
-};
+      const { data: publicUrlData } = supabase.storage
+        .from('profile_images')
+        .getPublicUrl(filePath);
+
+      const avatarUrl = publicUrlData?.publicUrl || '';
+
+      if (!avatarUrl) {
+        throw new Error('Could not generate public URL for uploaded image.');
+      }
+
+      const updatedProfile = {
+        ...formData,
+        avatar_url: avatarUrl,
+      };
+
+      setFormData(updatedProfile);
+
+      console.log('Uploaded avatar URL:', avatarUrl);
+
+      await recruiterService.updateProfile(updatedProfile);
+
+      showToast('success', 'Profile photo uploaded and saved.');
+      await loadProfile();
+    } catch (err) {
+      console.error(err);
+      showToast('error', err.message || 'Failed to upload profile image.');
+    } finally {
+      e.target.value = '';
+    }
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -141,9 +180,10 @@ export const CompanyProfile = () => {
     setSaving(true);
     try {
       await recruiterService.updateProfile(formData);
-      showToast('success', 'Profile updated successfully across FastAPI & Supabase!');
-      await loadProfile(); // Reload updated profile
+      showToast('success', 'Profile updated successfully.');
+      await loadProfile();
     } catch (err) {
+      console.error(err);
       showToast('error', err.message || 'Failed to update profile.');
     } finally {
       setSaving(false);
@@ -152,7 +192,6 @@ export const CompanyProfile = () => {
 
   return (
     <DashboardLayout title="Recruiter Profile">
-      {/* Toast Alert */}
       {toast && (
         <div
           style={{
@@ -176,69 +215,83 @@ export const CompanyProfile = () => {
         </div>
       )}
 
-      {/* Header Banner */}
       <div className="glass-card mb-4" style={{ padding: '1.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
           <div style={{ position: 'relative' }}>
             <img
               src={formData.avatar_url || 'https://i.pravatar.cc/120?img=68'}
-              alt={formData.full_name}
-              style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-primary)' }}
+              alt={formData.full_name || 'Recruiter'}
+              onError={(e) => {
+                e.currentTarget.src = 'https://i.pravatar.cc/120?img=68';
+              }}
+              style={{
+                width: 84,
+                height: 84,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '3px solid var(--color-primary)',
+              }}
             />
-          
-  <div
-    style={{
-      position: 'absolute',
-      bottom: 0,
-      right: 0,
-      background: 'var(--color-primary)',
-      color: '#fff',
-      borderRadius: '50%',
-      padding: '5px',
-      cursor: 'pointer',
-      display: 'flex'
-    }}
-    title="Change Photo"
-    onClick={() => document.getElementById("avatarUpload").click()}
-  >
-    <FiCamera size={14} />
-  </div>
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                background: 'var(--color-primary)',
+                color: '#fff',
+                borderRadius: '50%',
+                padding: '5px',
+                cursor: 'pointer',
+                display: 'flex',
+              }}
+              title="Change Photo"
+              onClick={() => document.getElementById('avatarUpload').click()}
+            >
+              <FiCamera size={14} />
+            </div>
 
-  <input
-    id="avatarUpload"
-    type="file"
-    accept="image/*"
-    style={{ display: "none" }}
-    onChange={handleImageUpload}
-  />
-
+            <input
+              id="avatarUpload"
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleImageUpload}
+            />
           </div>
 
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>{formData.full_name || 'John Doe'}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>
+                {formData.full_name || 'John Doe'}
+              </h2>
               <span className="badge-glass" style={{ color: 'var(--color-success)', background: '#e6f9f4' }}>
-                <FiCheckCircle style={{ marginRight: 4 }} /> {formData.verification_status}
+                <FiCheckCircle style={{ marginRight: 4 }} />
+                {formData.verification_status}
               </span>
             </div>
             <p style={{ margin: '0.2rem 0 0 0', color: 'var(--color-muted)', fontSize: '0.9rem' }}>
               {formData.designation} at <strong style={{ color: 'var(--color-text)' }}>{formData.company_name}</strong>
             </p>
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
-              <span>📍 {formData.location || 'San Francisco, CA'}</span>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)', flexWrap: 'wrap' }}>
+              <span>📍 {formData.location || 'Unknown location'}</span>
               <span>💼 {formData.experience_years} Years Experience</span>
               <span>📧 {formData.email}</span>
             </div>
           </div>
 
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FiSave /> {saving ? 'Saving...' : 'Save Profile Changes'}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <FiSave />
+            {saving ? 'Saving...' : 'Save Profile Changes'}
           </button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--color-border)' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
         {[
           { key: 'personal', label: 'Personal Details', icon: FiUser },
           { key: 'company', label: 'Company Details', icon: FiBriefcase },
@@ -271,7 +324,6 @@ export const CompanyProfile = () => {
         })}
       </div>
 
-      {/* Form Content */}
       <form onSubmit={handleSave} className="glass-card" style={{ padding: '1.75rem' }}>
         {activeTab === 'personal' && (
           <div className="grid-responsive grid-col-2" style={{ gap: '1.25rem' }}>
@@ -466,7 +518,7 @@ export const CompanyProfile = () => {
           </div>
         )}
 
-        <div style={{ marginTop: '1.75rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+        <div style={{ marginTop: '1.75rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button type="button" onClick={loadProfile} className="btn btn-outline">
             Reset Changes
           </button>

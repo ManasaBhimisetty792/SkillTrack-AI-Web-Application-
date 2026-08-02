@@ -1,696 +1,376 @@
 import api from './api';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-export const recruiterService = {
-  // ------------------------------------------------------------------------
-  // 1. RECRUITER PROFILE (Supabase: recruiter_profiles)
-  // ------------------------------------------------------------------------
+const fallbackProfile = {
+  full_name: 'John Doe',
+  email: 'john.doe@example.com',
+  phone: '+91 98765 43210',
+  designation: 'Senior Technical Recruiter',
+  avatar_url: 'https://i.pravatar.cc/120?img=68',
+  company_name: 'Nexus Tech Global',
+  company_logo: null,
+  company_website: 'https://nexustech.io',
+  industry: 'Software Engineering / AI Solutions',
+  company_size: '250-500 Employees',
+  location: 'San Francisco, CA / Hyderabad',
+  experience_years: 8,
+  specialization: 'Full Stack Engineering / Cloud Architecture',
+  bio: 'Passionate recruiter and mentor with 8 years of experience in building scalable engineering teams.',
+  verification_status: 'Verified',
+  tax_id: 'TAX-9821-US',
+  registration_doc_url: '',
+  verified_at: null,
+};
+
+const normalizeText = (value) =>
+  value === null || value === undefined ? '' : String(value).trim();
+
+const normalizeNumber = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const mapRecruiterRow = (r) => {
+  const techStack = [
+    ...(r.specialization ? [r.specialization] : []),
+    ...(r.industry ? [r.industry] : []),
+  ];
+
+  return {
+    id: r.user_id,
+    user_id: r.user_id,
+    name: r.full_name || 'Recruiter',
+    full_name: r.full_name || '',
+    email: r.email || '',
+    company: r.company_name || '',
+    designation: r.designation || 'Recruiter',
+    avatar:
+      r.avatar_url ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(r.full_name || 'Recruiter')}&background=4f46e5&color=fff&size=128`,
+    companyLogo:
+      r.company_logo ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(r.company_name || 'Co')}&background=1abc9c&color=fff&size=64`,
+    location: r.location || 'Remote',
+    bio: r.bio || '',
+    techStack,
+    rating: 4.8,
+    reviewsCount: 0,
+    experience: `${r.experience_years || 0} Years`,
+    experience_years: Number(r.experience_years || 0),
+    completedInterviews: 0,
+    isVerified: r.verification_status === 'Verified',
+    isPremiumRecruiter: Number(r.experience_years || 0) >= 8,
+    hourlyFee: 0,
+    linkedin: '',
+    website: r.company_website || '',
+    company_size: r.company_size || '',
+    industry: r.industry || '',
+    verification_status: r.verification_status || 'Pending',
+    tax_id: r.tax_id || '',
+    registration_doc_url: r.registration_doc_url || '',
+    verified_at: r.verified_at || null,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  };
+};
+
+const recruiterService = {
   async getProfile() {
     try {
       const response = await api.get('/api/v1/recruiter/profile');
-      if (response.data?.data) return response.data.data;
+      if (response?.data?.data) return response.data.data;
     } catch (e) {
       console.warn('FastAPI getProfile fallback to Supabase:', e.message);
     }
 
-    if (isSupabaseConfigured()) {
-  try {
+    if (!isSupabaseConfigured() || !supabase) {
+      const saved = localStorage.getItem('recruiter_profile');
+      return saved ? JSON.parse(saved) : fallbackProfile;
+    }
 
-    const { data: userData } = await supabase.auth.getUser();
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
 
-    const { data } = await supabase
-      .from('recruiter_profiles')
-      .select('*')
-      .eq('user_id', userData.user.id)
-      .single();
+      const user = authData?.user;
+      if (!user) throw new Error('No authenticated Supabase user found');
 
-    if (data) return data;
+      const [
+        { data: baseProfile, error: baseError },
+        { data: recruiterProfile, error: recruiterError },
+      ] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, name, email')
+          .eq('id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('recruiter_profiles')
+          .select(`
+            user_id,
+            full_name,
+            email,
+            phone,
+            designation,
+            avatar_url,
+            company_name,
+            company_logo,
+            company_website,
+            industry,
+            company_size,
+            location,
+            experience_years,
+            specialization,
+            bio,
+            verification_status,
+            tax_id,
+            registration_doc_url,
+            verified_at,
+            created_at,
+            updated_at
+          `)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ]);
 
-  } catch (err) {
-    console.warn('Supabase recruiter_profiles query failed:', err.message);
-  }
-}
+      if (baseError) throw baseError;
+      if (recruiterError) throw recruiterError;
 
-    const saved = localStorage.getItem('st_recruiter_profile');
-    if (saved) return JSON.parse(saved);
-
-    return {
-      full_name: 'John Doe',
-      email: 'john.doe@example.com',
-      phone: '+91 98765 43210',
-      designation: 'Senior Technical Recruiter',
-      avatar_url: 'https://i.pravatar.cc/120?img=68',
-      company_name: 'Nexus Tech Global',
-      company_logo: null,
-      company_website: 'https://nexustech.io',
-      industry: 'Software Engineering & AI Solutions',
-      company_size: '250-500 Employees',
-      location: 'San Francisco, CA & Hyderabad',
-      experience_years: 8,
-      specialization: 'Full Stack Engineering & Cloud Architecture',
-      bio: 'Passionate recruiter and mentor with 8+ years of experience in building scalable engineering teams.',
-      verification_status: 'Verified',
-      tax_id: 'TAX-9821-US',
-    };
+      return {
+        full_name: recruiterProfile?.full_name || baseProfile?.full_name || baseProfile?.name || '',
+        email: recruiterProfile?.email || baseProfile?.email || user.email || '',
+        phone: recruiterProfile?.phone || '',
+        designation: recruiterProfile?.designation || '',
+        avatar_url: recruiterProfile?.avatar_url || '',
+        company_name: recruiterProfile?.company_name || '',
+        company_logo: recruiterProfile?.company_logo || '',
+        company_website: recruiterProfile?.company_website || '',
+        industry: recruiterProfile?.industry || '',
+        company_size: recruiterProfile?.company_size || '',
+        location: recruiterProfile?.location || '',
+        experience_years: normalizeNumber(recruiterProfile?.experience_years, 0),
+        specialization: recruiterProfile?.specialization || '',
+        bio: recruiterProfile?.bio || '',
+        verification_status: recruiterProfile?.verification_status || 'Verified',
+        tax_id: recruiterProfile?.tax_id || '',
+        registration_doc_url: recruiterProfile?.registration_doc_url || '',
+        verified_at: recruiterProfile?.verified_at || null,
+        created_at: recruiterProfile?.created_at || null,
+        updated_at: recruiterProfile?.updated_at || null,
+      };
+    } catch (err) {
+      console.warn('Supabase recruiter profile query failed:', err.message);
+      const saved = localStorage.getItem('recruiter_profile');
+      return saved ? JSON.parse(saved) : fallbackProfile;
+    }
   },
 
   async updateProfile(profileData) {
-    localStorage.setItem('st_recruiter_profile', JSON.stringify(profileData));
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+
+    const user = authData?.user;
+    if (!user?.id) throw new Error('No authenticated Supabase user found');
+
+    const fullName = normalizeText(profileData.full_name);
+    const email = normalizeText(profileData.email);
+
+    const basePayload = {
+      id: user.id,
+      full_name: fullName,
+      email,
+    };
+
+    const recruiterPayload = {
+      user_id: user.id,
+      full_name: fullName,
+      email,
+      phone: normalizeText(profileData.phone),
+      designation: normalizeText(profileData.designation),
+      avatar_url: normalizeText(profileData.avatar_url),
+      company_name: normalizeText(profileData.company_name),
+      company_logo: normalizeText(profileData.company_logo),
+      company_website: normalizeText(profileData.company_website),
+      industry: normalizeText(profileData.industry),
+      company_size: normalizeText(profileData.company_size),
+      location: normalizeText(profileData.location),
+      experience_years: normalizeNumber(profileData.experience_years, 0),
+      specialization: normalizeText(profileData.specialization),
+      bio: normalizeText(profileData.bio),
+      verification_status: normalizeText(profileData.verification_status) || 'Verified',
+      tax_id: normalizeText(profileData.tax_id),
+      registration_doc_url: normalizeText(profileData.registration_doc_url),
+      verified_at: profileData.verified_at || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    localStorage.setItem('recruiter_profile', JSON.stringify(profileData));
 
     try {
       const response = await api.put('/api/v1/recruiter/profile', profileData);
-      if (response.data) {
-        if (isSupabaseConfigured()) {
 
-  const { data: userData } = await supabase.auth.getUser();
+      if (response?.data) {
+        if (isSupabaseConfigured() && supabase) {
+          const { error: baseError } = await supabase
+            .from('profiles')
+            .upsert(basePayload, { onConflict: 'id' })
+            .select('id')
+            .maybeSingle();
 
-  if (userData?.user?.id) {
+          if (baseError) throw baseError;
 
-    const { error } = await supabase
-      .from('recruiter_profiles')
-      .update({
-        ...profileData,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userData.user.id);
+          const { data, error } = await supabase
+            .from('recruiter_profiles')
+            .upsert(recruiterPayload, { onConflict: 'user_id' })
+            .select('*')
+            .maybeSingle();
 
-    if (error) throw error;
-  }
-}
+          if (error) throw error;
+          return data || response.data;
+        }
+
         return response.data;
       }
     } catch (e) {
       console.warn('FastAPI updateProfile warning:', e.message);
     }
 
-    if (isSupabaseConfigured()) {
+    if (isSupabaseConfigured() && supabase) {
+      const { error: baseError } = await supabase
+        .from('profiles')
+        .upsert(basePayload, { onConflict: 'id' })
+        .select('id')
+        .maybeSingle();
 
-  const { data: userData } = await supabase.auth.getUser();
-
-  if (userData?.user?.id) {
-
-    const { error } = await supabase
-      .from('recruiter_profiles')
-      .update({
-        ...profileData,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userData.user.id);
-
-    if (error) throw error;
-  }
-}
-
-    return { status: 'success', message: 'Profile saved successfully', data: profileData };
-  },
-
-  // ------------------------------------------------------------------------
-  // 2. DASHBOARD OVERVIEW (Supabase queries on jobs, candidates, interviews)
-  // ------------------------------------------------------------------------
-  async getDashboardOverview() {
-    try {
-      const response = await api.get('/api/v1/recruiter/dashboard');
-      if (response.data) return response.data;
-    } catch (e) {
-      console.warn('FastAPI dashboard fetch fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data: jobs } = await supabase.from('recruiter_jobs').select('*');
-        const { data: candidates } = await supabase.from('recruiter_candidates').select('*');
-        const { data: interviews } = await supabase.from('recruiter_interviews').select('*');
-
-        if (jobs || candidates || interviews) {
-          return {
-            metrics: {
-              pending_requests: candidates?.filter(c => c.fit_status === 'Maybe').length || 12,
-              todays_interviews: interviews?.filter(i => i.status === 'Confirmed').length || 3,
-              upcoming_interviews: interviews?.length || 5,
-              completed_interviews: interviews?.filter(i => i.status === 'Completed').length || 25,
-              active_jobs: jobs?.length || 8,
-              total_applicants: candidates?.length || 240,
-            },
-            recent_applicants: candidates?.slice(0, 3) || [],
-            today_schedule: interviews?.slice(0, 3) || [],
-          };
-        }
-      } catch (err) {
-        console.warn('Supabase dashboard queries failed:', err.message);
+      if (baseError) {
+        throw new Error(`Failed to update profiles table: ${baseError.message}`);
       }
-    }
 
-    return {
-      metrics: {
-        pending_requests: 12,
-        todays_interviews: 3,
-        upcoming_interviews: 5,
-        completed_interviews: 25,
-        active_jobs: 8,
-        total_applicants: 240,
-      },
-      recent_applicants: [
-        { id: 1, name: 'Akhila Reddy', role: 'Python Developer', exp: '2.5 Yrs Exp.', loc: 'Hyderabad, India', ats: 91, fit: 'Suitable', skills: ['Python', 'Django', 'SQL', 'REST API'], date: '29 Jul, 2024', img: 'https://i.pravatar.cc/80?img=47' },
-        { id: 2, name: 'Rahul Kumar', role: 'Full Stack Developer', exp: '3.1 Yrs Exp.', loc: 'Bangalore, India', ats: 87, fit: 'Suitable', skills: ['React', 'Node.js', 'MongoDB', 'Express'], date: '29 Jul, 2024', img: 'https://i.pravatar.cc/80?img=12' },
-        { id: 3, name: 'Sneha Patel', role: 'Frontend Developer', exp: '1.8 Yrs Exp.', loc: 'Pune, India', ats: 72, fit: 'Maybe', skills: ['HTML', 'CSS', 'JavaScript', 'React'], date: '29 Jul, 2024', img: 'https://i.pravatar.cc/80?img=32' },
-      ],
-      today_schedule: [
-        { time: '10:00 AM', name: 'Akhila Reddy', role: 'Python Developer', status: 'Confirmed', img: 'https://i.pravatar.cc/80?img=47' },
-        { time: '02:00 PM', name: 'Rahul Kumar', role: 'Full Stack Developer', status: 'Confirmed', img: 'https://i.pravatar.cc/80?img=12' },
-        { time: '04:00 PM', name: 'Priya Sharma', role: 'React Developer', status: 'Pending', img: 'https://i.pravatar.cc/80?img=25' },
-      ],
-    };
-  },
-
-  // ------------------------------------------------------------------------
-  // 3. REVENUE & PAYOUTS (Supabase: recruiter_revenue & recruiter_transactions)
-  // ------------------------------------------------------------------------
-  async getRevenueData() {
-    try {
-      const response = await api.get('/api/v1/recruiter/revenue');
-      if (response.data) return response.data;
-    } catch (e) {
-      console.warn('FastAPI revenue fetch fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data: rev } = await supabase.from('recruiter_revenue').select('*').single();
-        const { data: txns } = await supabase.from('recruiter_transactions').select('*');
-        if (rev) {
-          return {
-            overview: rev,
-            transactions: txns || [],
-          };
-        }
-      } catch (err) {
-        console.warn('Supabase revenue query failed:', err.message);
-      }
-    }
-
-    return {
-      overview: {
-        monthly_revenue: 14850.00,
-        pending_payouts: 3200.00,
-        paid_history: 48900.00,
-        performance_bonus: 1500.00,
-        expected_payout: 4700.00,
-        ranking: 4,
-      },
-      monthly_chart: [
-        { month: 'Jan', amount: 6200 },
-        { month: 'Feb', amount: 7800 },
-        { month: 'Mar', amount: 9100 },
-        { month: 'Apr', amount: 8400 },
-        { month: 'May', amount: 11200 },
-        { month: 'Jun', amount: 13500 },
-        { month: 'Jul', amount: 14850 },
-      ],
-      transactions: [
-        { id: 'TXN-8091', date: '2026-07-28', description: 'Candidate Placement Fee - Akhila Reddy', type: 'Placement Commission', amount: 2500.00, status: 'Completed' },
-        { id: 'TXN-8044', date: '2026-07-25', description: 'Monthly Performance Milestone Bonus', type: 'Bonus', amount: 1500.00, status: 'Completed' },
-        { id: 'TXN-7982', date: '2026-07-20', description: 'Candidate Placement Fee - Rahul Kumar', type: 'Placement Commission', amount: 3200.00, status: 'Pending' },
-        { id: 'TXN-7910', date: '2026-07-15', description: 'Withdrawal to Chase Bank (****4821)', type: 'Withdrawal', amount: -5000.00, status: 'Completed' },
-        { id: 'TXN-7855', date: '2026-07-10', description: 'Candidate Placement Fee - Sneha Patel', type: 'Placement Commission', amount: 2100.00, status: 'Completed' },
-      ],
-      withdraw_history: [
-        { date: '15 Jul, 2026', amount: '$5,000.00', account: 'Chase Bank (****4821)', status: 'Completed' },
-        { date: '01 Jul, 2026', amount: '$4,500.00', account: 'Chase Bank (****4821)', status: 'Completed' },
-        { date: '15 Jun, 2026', amount: '$6,200.00', account: 'Chase Bank (****4821)', status: 'Completed' },
-      ],
-    };
-  },
-
-  // ------------------------------------------------------------------------
-  // 4. NOTIFICATIONS (Supabase: recruiter_notifications)
-  // ------------------------------------------------------------------------
-  async getNotifications() {
-    try {
-      const response = await api.get('/api/v1/recruiter/notifications');
-      if (response.data?.notifications) return response.data.notifications;
-    } catch (e) {
-      console.warn('FastAPI notifications fetch fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data } = await supabase.from('recruiter_notifications').select('*');
-        if (data && data.length) return data;
-      } catch (err) {
-        console.warn('Supabase recruiter_notifications query failed:', err.message);
-      }
-    }
-
-    return [
-      { id: 1, icon: 'request', text: 'New interview request from Akhila Reddy', sub: 'Python Developer', time: '5 mins ago', category: 'Requests', read: false },
-      { id: 2, icon: 'accept', text: 'Rahul Kumar accepted your interview request', sub: 'Full Stack Developer', time: '20 mins ago', category: 'Interviews', read: false },
-      { id: 3, icon: 'reminder', text: 'Interview with Priya Sharma starts in 30 minutes', sub: 'React Developer', time: '30 mins ago', category: 'Interviews', read: false },
-      { id: 4, icon: 'cancel', text: 'Vikram Singh cancelled the interview', sub: 'Backend Developer', time: '2 hours ago', category: 'Interviews', read: true },
-      { id: 5, icon: 'complete', text: 'Your interview with Suresh Patel has been completed', sub: 'Senior Architect', time: '3 hours ago', category: 'Interviews', read: true },
-    ];
-  },
-
-  // ------------------------------------------------------------------------
-  // 5. INTERVIEWS & SCHEDULE (Supabase: recruiter_interviews)
-  // ------------------------------------------------------------------------
-  async getInterviews() {
-    try {
-      const response = await api.get('/api/v1/recruiter/interviews');
-      if (response.data) return response.data;
-    } catch (e) {
-      console.warn('FastAPI interviews fetch fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data } = await supabase.from('recruiter_interviews').select('*');
-        if (data && data.length) {
-          return {
-            schedule: data.filter(i => i.status !== 'Completed'),
-            history: data.filter(i => i.status === 'Completed' || i.status === 'Cancelled'),
-          };
-        }
-      } catch (err) {
-        console.warn('Supabase recruiter_interviews query failed:', err.message);
-      }
-    }
-
-    return {
-      schedule: [
-        { id: 101, time: '10:00 AM', name: 'Akhila Reddy', role: 'Python Developer', status: 'Confirmed', img: 'https://i.pravatar.cc/80?img=47', date: '2026-07-31' },
-        { id: 102, time: '02:00 PM', name: 'Rahul Kumar', role: 'Full Stack Developer', status: 'Confirmed', img: 'https://i.pravatar.cc/80?img=12', date: '2026-07-31' },
-        { id: 103, time: '04:00 PM', name: 'Priya Sharma', role: 'React Developer', status: 'Pending', img: 'https://i.pravatar.cc/80?img=25', date: '2026-07-31' },
-      ],
-      history: [
-        { id: 201, name: 'Akhila Reddy', role: 'Python Developer', date: '30 Jul, 2024', time: '10:00 AM', dur: '60 min', status: 'Completed', img: 'https://i.pravatar.cc/80?img=47' },
-        { id: 202, name: 'Rahul Kumar', role: 'Full Stack Developer', date: '28 Jul, 2024', time: '02:00 PM', dur: '45 min', status: 'Completed', img: 'https://i.pravatar.cc/80?img=12' },
-        { id: 203, name: 'Sneha Patel', role: 'Frontend Developer', date: '25 Jul, 2024', time: '11:00 AM', dur: '60 min', status: 'Completed', img: 'https://i.pravatar.cc/80?img=32' },
-        { id: 204, name: 'Vikram Singh', role: 'Backend Developer', date: '24 Jul, 2024', time: '04:00 PM', dur: '45 min', status: 'Cancelled', img: 'https://i.pravatar.cc/80?img=53' },
-      ],
-    };
-  },
-
-  // ------------------------------------------------------------------------
-  // 6. CANDIDATES (Supabase: recruiter_candidates)
-  // ------------------------------------------------------------------------
-  async getCandidates() {
-    try {
-      const response = await api.get('/api/v1/recruiter/candidates');
-      if (response.data?.candidates) return response.data.candidates;
-    } catch (e) {
-      console.warn('FastAPI candidates fetch fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data } = await supabase.from('recruiter_candidates').select('*');
-        if (data && data.length) return data;
-      } catch (err) {
-        console.warn('Supabase recruiter_candidates query failed:', err.message);
-      }
-    }
-
-    return [
-      { id: 1, name: 'Akhila Reddy', role: 'Python Developer', exp: '2.5 Yrs Exp.', loc: 'Hyderabad, India', ats: 91, fit: 'Suitable', skills: ['Python', 'Django', 'SQL', 'REST API'], date: '29 Jul, 2024', img: 'https://i.pravatar.cc/80?img=47' },
-      { id: 2, name: 'Rahul Kumar', role: 'Full Stack Developer', exp: '3.1 Yrs Exp.', loc: 'Bangalore, India', ats: 87, fit: 'Suitable', skills: ['React', 'Node.js', 'MongoDB', 'Express'], date: '29 Jul, 2024', img: 'https://i.pravatar.cc/80?img=12' },
-      { id: 3, name: 'Sneha Patel', role: 'Frontend Developer', exp: '1.8 Yrs Exp.', loc: 'Pune, India', ats: 72, fit: 'Maybe', skills: ['HTML', 'CSS', 'JavaScript', 'React'], date: '29 Jul, 2024', img: 'https://i.pravatar.cc/80?img=32' },
-      { id: 4, name: 'Vikram Singh', role: 'Backend Developer', exp: '4.2 Yrs Exp.', loc: 'Delhi, India', ats: 65, fit: 'Maybe', skills: ['Java', 'Spring Boot', 'MySQL'], date: '29 Jul, 2024', img: 'https://i.pravatar.cc/80?img=53' },
-    ];
-  },
-
-  // ------------------------------------------------------------------------
-  // 7. APPLICATIONS (Supabase: recruiter_applications)
-  // ------------------------------------------------------------------------
-  async getApplications() {
-    try {
-      const response = await api.get('/api/v1/recruiter/applications');
-      if (response.data?.applications) return response.data.applications;
-    } catch (e) {
-      console.warn('FastAPI applications fetch fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data } = await supabase.from('recruiter_applications').select('*');
-        if (data && data.length) return data;
-      } catch (err) {
-        console.warn('Supabase recruiter_applications query failed:', err.message);
-      }
-    }
-
-    return [
-      { id: 'app_1', candidate_name: 'Akhila Reddy', role: 'Python Developer', job_title: 'Senior Python Architect', ats_score: 91, fit: 'Suitable', status: 'Interviewing', date: '2026-07-29' },
-      { id: 'app_2', candidate_name: 'Rahul Kumar', role: 'Full Stack Developer', job_title: 'Lead Full Stack React Engineer', ats_score: 87, fit: 'Suitable', status: 'Offered', date: '2026-07-28' },
-      { id: 'app_3', candidate_name: 'Sneha Patel', role: 'Frontend Developer', job_title: 'Lead Full Stack React Engineer', ats_score: 72, fit: 'Maybe', status: 'Screening', date: '2026-07-27' },
-      { id: 'app_4', candidate_name: 'Vikram Singh', role: 'Backend Developer', job_title: 'Senior Python Architect', ats_score: 65, fit: 'Maybe', status: 'Rejected', date: '2026-07-24' },
-    ];
-  },
-
-  // ------------------------------------------------------------------------
-  // 8. JOBS (Supabase: recruiter_jobs)
-  // ------------------------------------------------------------------------
-  async getJobs() {
-    try {
-      const response = await api.get('/api/v1/recruiter/jobs');
-      if (response.data?.jobs) return response.data.jobs;
-    } catch (e) {
-      console.warn('FastAPI jobs fetch fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data } = await supabase.from('recruiter_jobs').select('*');
-        if (data && data.length) return data;
-      } catch (err) {
-        console.warn('Supabase recruiter_jobs query failed:', err.message);
-      }
-    }
-
-    return [
-      {
-        id: 'job_1',
-        title: 'Lead Full Stack React Engineer',
-        department: 'Engineering',
-        location: 'San Francisco, CA (Hybrid)',
-        type: 'Full-Time',
-        applicantsCount: 142,
-        aiScoreThreshold: 85,
-        status: 'Active',
-        postedDate: '2026-07-01',
-        salaryRange: '$160,000 - $190,000',
-      },
-      {
-        id: 'job_2',
-        title: 'AI Product Specialist & Technical Recruiter',
-        department: 'Talent Acquisition',
-        location: 'Remote',
-        type: 'Full-Time',
-        applicantsCount: 88,
-        aiScoreThreshold: 80,
-        status: 'Active',
-        postedDate: '2026-07-10',
-        salaryRange: '$120,000 - $145,000',
-      },
-      {
-        id: 'job_3',
-        title: 'Senior Python & FastAPI Architect',
-        department: 'Backend & Cloud',
-        location: 'New York, NY',
-        type: 'Full-Time',
-        applicantsCount: 210,
-        aiScoreThreshold: 90,
-        status: 'Active',
-        postedDate: '2026-07-15',
-        salaryRange: '$175,000 - $210,000',
-      },
-    ];
-  },
-
-  async createJob(jobData) {
-    try {
-      const response = await api.post('/api/v1/recruiter/jobs', jobData);
-      if (response.data?.job) return response.data.job;
-    } catch (e) {
-      console.warn('FastAPI createJob fallback to Supabase:', e.message);
-    }
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase.from('recruiter_jobs').insert(jobData).select().single();
-        if (!error && data) return data;
-      } catch (err) {
-        console.warn('Supabase createJob query failed:', err.message);
-      }
-    }
-
-    return {
-      id: 'job_' + Date.now(),
-      ...jobData,
-      applicantsCount: 0,
-      postedDate: new Date().toISOString().split('T')[0],
-      status: 'Active',
-    };
-  },
-
-  // ------------------------------------------------------------------------
-  // 9. FETCH ALL RECRUITER PROFILES (for Student Find Recruiters page)
-  // ------------------------------------------------------------------------
-  async getAllRecruiterProfiles() {
-    if (isSupabaseConfigured()) {
-      try {
-        // Fetch all rows from recruiter_profiles without assuming restrictive column lists
-        const { data: recData, error: recErr } = await supabase
-          .from('recruiter_profiles')
-          .select('*');
-
-        if (recErr) {
-          console.warn('Supabase recruiter_profiles query error:', recErr.message);
-        }
-
-        // Also fetch base profiles for recruiters if available
-        let profileMap = {};
-        try {
-          const { data: profData } = await supabase
-            .from('profiles')
-            .select('id, name, email, avatar_url, role');
-
-          if (profData && Array.isArray(profData)) {
-            profData.forEach(p => {
-              if (p && p.id) profileMap[p.id] = p;
-            });
-          }
-        } catch (e) {
-          // Ignore profiles table lookup error
-        }
-
-        if (!recErr && Array.isArray(recData)) {
-          // Return real Supabase records mapped dynamically
-          return recData.map((r) => {
-            const userId = r.user_id || r.id;
-            const baseProf = profileMap[userId] || profileMap[r.id] || {};
-
-            const name = r.full_name || baseProf.name || r.name || r.username || 'Verified Recruiter';
-            const company = r.company_name || r.company || 'Tech Solutions';
-            const avatar = r.avatar_url || baseProf.avatar_url ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4f46e5&color=fff&size=128`;
-            const companyLogo = r.company_logo ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(company)}&background=1abc9c&color=fff&size=64`;
-
-            const isVerified = r.is_approved === true ||
-              r.approval_status === 'approved' ||
-              r.verification_status === 'Verified' ||
-              true;
-
-            let techStack = [];
-            if (Array.isArray(r.skills) && r.skills.length > 0) {
-              techStack = r.skills;
-            } else if (typeof r.skills === 'string' && r.skills.trim().length > 0) {
-              techStack = r.skills.split(/[,&/]/).map(s => s.trim()).filter(Boolean);
-            } else if (typeof r.specialization === 'string' && r.specialization.trim().length > 0) {
-              techStack = r.specialization
-                .split(/[,&/]/)
-                .map(s => s.trim())
-                .filter(Boolean);
-            }
-            if (!techStack || techStack.length === 0) {
-              techStack = ['Python', 'Full Stack', 'System Design'];
-            }
-
-            return {
-              id: r.id,
-              user_id: userId,
-              name,
-              designation: r.designation || r.specialization || 'Technical Recruiter',
-              company,
-              companyLogo,
-              avatar,
-              bio: r.bio || 'Senior Technical Recruiter passionate about matching top tech talent.',
-              location: r.location || 'Remote',
-              experience: r.experience_years ? `${r.experience_years}+ Years` : (r.experience || '5+ Years'),
-              industry: r.industry || r.specialization || 'Technology',
-              techStack,
-              interviewTypes: Array.isArray(r.interview_types)
-                ? r.interview_types
-                : ['Technical Deep Dive', 'System Design', 'Behavioral'],
-              linkedin: r.company_website || r.linkedin_url || '',
-              website: r.company_website || r.website || '',
-              isVerified,
-              isPremiumRecruiter: (r.experience_years || 5) >= 5,
-              hourlyFee: r.hourly_fee || r.hourlyFee || 75,
-              rating: r.rating || 4.9,
-              reviewsCount: r.reviews_count || 18,
-              completedInterviews: r.completed_interviews || 64,
-              created_at: r.created_at || r.updated_at || new Date().toISOString(),
-            };
-          });
-        }
-      } catch (err) {
-        console.warn('Supabase getAllRecruiterProfiles exception:', err.message);
-      }
-      
-      // If Supabase is configured but has 0 records or error, return empty array so UI shows empty state
-      return [];
-    }
-
-    // Only return mock fallback if Supabase is NOT configured at all
-    return [];
-  },
-
-  // ------------------------------------------------------------------------
-  // 10. BOOK INTERVIEW — Student sends request → stored in Supabase
-  // ------------------------------------------------------------------------
-  async bookInterview({ recruiter_id, recruiter_user_id, student_id, interview_type, preferred_datetime, message }) {
-    const payload = {
-      recruiter_id,
-      recruiter_user_id,
-      student_id,
-      interview_type: interview_type || 'Technical Deep Dive',
-      preferred_datetime,
-      message: message || '',
-      status: 'pending',       // pending | accepted | rejected | cancelled
-      created_at: new Date().toISOString(),
-    };
-
-    if (isSupabaseConfigured()) {
       const { data, error } = await supabase
-        .from('interview_requests')
-        .insert([payload])
-        .select()
-        .single();
-      if (error) throw error;
+        .from('recruiter_profiles')
+        .upsert(recruiterPayload, { onConflict: 'user_id' })
+        .select('*')
+        .maybeSingle();
 
-      // Also write a notification for the recruiter
-      await supabase.from('notifications').insert([{
-        user_id: recruiter_user_id,
-        title: '📅 New Interview Request',
-        message: `A candidate has requested a "${interview_type}" session on ${new Date(preferred_datetime).toLocaleString()}.`,
-        notification_type: 'interview_scheduled',
-        is_read: false,
-        action_url: '/recruiter/notifications',
-        action_text: 'View Request',
-      }]);
+      if (error) {
+        throw new Error(`Failed to save recruiter profile: ${error.message}`);
+      }
 
       return data;
     }
 
-    // Mock mode — just return the payload
-    return { id: `req_${Date.now()}`, ...payload };
+    return {
+      status: 'success',
+      message: 'Profile saved successfully',
+      data: profileData,
+    };
   },
 
-  // ------------------------------------------------------------------------
-  // 11. GET INTERVIEW REQUESTS — for Recruiter Notifications page
-  // ------------------------------------------------------------------------
-  async getInterviewRequests() {
-    if (isSupabaseConfigured()) {
-      try {
-        const { data: userData } = await supabase.auth.getUser();
-        const currentUserId = userData?.user?.id;
+  async getAllRecruiterProfiles() {
+    if (!isSupabaseConfigured() || !supabase) return [];
 
-        // Fetch interview_requests from Supabase without complex relational inner joins
-        const { data: requests, error } = await supabase
-          .from('interview_requests')
-          .select('*')
-          .order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('recruiter_profiles')
+      .select(`
+        user_id,
+        full_name,
+        email,
+        phone,
+        designation,
+        avatar_url,
+        company_name,
+        company_logo,
+        company_website,
+        industry,
+        company_size,
+        location,
+        experience_years,
+        specialization,
+        bio,
+        verification_status,
+        tax_id,
+        registration_doc_url,
+        verified_at,
+        created_at,
+        updated_at
+      `)
+      .order('created_at', { ascending: false });
 
-        if (error) {
-          console.warn('Supabase getInterviewRequests error:', error.message);
-          return [];
-        }
+    if (error) throw error;
+    return data || [];
+  },
 
-        if (requests && requests.length > 0) {
-          // Filter requests relevant to current user if logged in, or return all requests
-          const filteredRequests = currentUserId
-            ? requests.filter(r => r.recruiter_user_id === currentUserId || r.recruiter_id === currentUserId || !r.recruiter_user_id)
-            : requests;
-
-          const targetRequests = filteredRequests.length > 0 ? filteredRequests : requests;
-
-          // Fetch student/candidate profiles to display real candidate names
-          const studentIds = [...new Set(targetRequests.map(r => r.student_id).filter(Boolean))];
-          let studentMap = {};
-
-          if (studentIds.length > 0) {
-            try {
-              const { data: profs } = await supabase
-                .from('profiles')
-                .select('id, name, email, avatar_url')
-                .in('id', studentIds);
-
-              if (profs && Array.isArray(profs)) {
-                profs.forEach(p => { studentMap[p.id] = p; });
-              }
-            } catch (e) {}
-
-            try {
-              const { data: cProfs } = await supabase
-                .from('candidate_profiles')
-                .select('id, username, phone')
-                .in('id', studentIds);
-
-              if (cProfs && Array.isArray(cProfs)) {
-                cProfs.forEach(c => {
-                  if (studentMap[c.id]) {
-                    studentMap[c.id].username = c.username;
-                  } else {
-                    studentMap[c.id] = c;
-                  }
-                });
-              }
-            } catch (e) {}
-          }
-
-          return targetRequests.map(r => {
-            const studentInfo = studentMap[r.student_id] || {};
-            const candName = studentInfo.name || studentInfo.username || 'Candidate';
-            return {
-              ...r,
-              candidate_name: candName,
-              candidate_email: studentInfo.email || '',
-              candidate_avatar: studentInfo.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(candName)}&background=4f46e5&color=fff`,
-            };
-          });
-        }
-        return [];
-      } catch (err) {
-        console.warn('Supabase getInterviewRequests failed:', err.message);
-      }
+  async getDashboardOverview() {
+    if (!isSupabaseConfigured() || !supabase) {
+      return {
+        totalRecruiters: 0,
+        verifiedRecruiters: 0,
+        pendingRecruiters: 0,
+        recentRecruiters: [],
+      };
     }
-    return [];
+
+    const { data, error } = await supabase
+      .from('recruiter_profiles')
+      .select(`
+        user_id,
+        full_name,
+        company_name,
+        verification_status,
+        created_at,
+        avatar_url,
+        experience_years,
+        industry,
+        designation
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const rows = data || [];
+    return {
+      totalRecruiters: rows.length,
+      verifiedRecruiters: rows.filter((r) => r.verification_status === 'Verified').length,
+      pendingRecruiters: rows.filter((r) => r.verification_status !== 'Verified').length,
+      recentRecruiters: rows.slice(0, 5).map((r) => ({
+        id: r.user_id,
+        name: r.full_name,
+        company: r.company_name,
+        status: r.verification_status,
+        created_at: r.created_at,
+        avatar: r.avatar_url,
+        experience_years: r.experience_years,
+        industry: r.industry,
+        designation: r.designation,
+      })),
+    };
   },
 
-  // ------------------------------------------------------------------------
-  // 12. RESPOND TO INTERVIEW REQUEST — Accept or Reject
-  // ------------------------------------------------------------------------
-  async respondToInterviewRequest(requestId, action, studentUserId) {
-    // action: 'accepted' | 'rejected'
-    if (isSupabaseConfigured()) {
-      const { error } = await supabase
-        .from('interview_requests')
-        .update({ status: action, updated_at: new Date().toISOString() })
-        .eq('id', requestId);
-      if (error) throw error;
-
-      // Notify the student
-      if (studentUserId) {
-        const isAccepted = action === 'accepted';
-        await supabase.from('notifications').insert([{
-          user_id: studentUserId,
-          title: isAccepted ? '✅ Interview Request Accepted!' : '❌ Interview Request Declined',
-          message: isAccepted
-            ? 'Your interview request has been accepted by the recruiter. Check your schedule for details.'
-            : 'Your interview request was not accepted at this time. You can try booking with another recruiter.',
-          notification_type: isAccepted ? 'interview_accepted' : 'interview_cancelled',
-          is_read: false,
-          action_url: isAccepted ? '/student/live-interview' : '/student/find-recruiters',
-          action_text: isAccepted ? 'Join Interview' : 'Find Another Recruiter',
-        }]);
-      }
-
-      return true;
+  async bookInterview(payload) {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { status: 'success', message: 'Booked locally' };
     }
-    return true; // mock — always succeeds
+
+    const { data, error } = await supabase
+      .from('interview_bookings')
+      .insert({
+        recruiter_id: payload.recruiter_id,
+        recruiter_user_id: payload.recruiter_user_id,
+        student_id: payload.student_id,
+        interview_type: payload.interview_type,
+        preferred_datetime: payload.preferred_datetime,
+        message: payload.message || '',
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      })
+      .select('*')
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
   },
+
+  mapRecruiterRow,
 };
 
 export default recruiterService;
-

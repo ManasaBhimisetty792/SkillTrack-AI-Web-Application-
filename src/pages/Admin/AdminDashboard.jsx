@@ -210,7 +210,7 @@ export const AdminDashboard = () => {
       </div>
 
       {/* System Audit & Activity Timeline */}
-      <div className="glass-card" style={{ padding: '1.5rem' }}>
+      <div className="glass-card mb-4" style={{ padding: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>System Audit & Security Activity</h3>
           <span style={{ fontSize: '0.78rem', color: 'var(--color-primary)', fontWeight: 600 }}>Live Logs</span>
@@ -221,7 +221,59 @@ export const AdminDashboard = () => {
           ))}
         </div>
       </div>
+
+      {/* Live Admin System Notifications */}
+      <AdminNotificationsFeed />
     </DashboardLayout>
+  );
+};
+
+const AdminNotificationsFeed = () => {
+  const [adminNotifs, setAdminNotifs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    import('../../services/notificationService').then(({ notificationService }) => {
+      notificationService.getAdminNotifications().then((data) => {
+        if (isMounted) {
+          setAdminNotifs(Array.isArray(data) ? data : []);
+          setLoading(false);
+        }
+      }).catch(err => {
+        if (isMounted) setLoading(false);
+      });
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  return (
+    <div className="glass-card" style={{ padding: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--color-primary)' }}>
+          📢 System-Wide Notifications & Event Feed ({adminNotifs.length})
+        </h3>
+        <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>Realtime Supabase Stream</span>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-muted)', fontSize: '0.85rem' }}>Loading system logs...</div>
+      ) : adminNotifs.length === 0 ? (
+        <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-muted)', fontSize: '0.85rem' }}>No system notifications logged yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {adminNotifs.slice(0, 10).map((n) => (
+            <div key={n.id} style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)' }}>{n.title}</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginTop: '0.15rem' }}>{n.message}</div>
+              </div>
+              <span className="badge-glass" style={{ fontSize: '0.7rem' }}>{n.notification_type || 'System'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 

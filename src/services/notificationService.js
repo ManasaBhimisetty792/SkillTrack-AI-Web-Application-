@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fallback mock data (used when Supabase is not configured)
+// Fallback Mock Notifications
 // ─────────────────────────────────────────────────────────────────────────────
 const MOCK_NOTIFICATIONS = [
   {
@@ -13,6 +13,7 @@ const MOCK_NOTIFICATIONS = [
     is_read: false,
     action_url: '/student/reports',
     action_text: 'View Report',
+    receiver_role: 'student',
   },
   {
     id: 'notif_2',
@@ -23,20 +24,10 @@ const MOCK_NOTIFICATIONS = [
     is_read: false,
     action_url: '/student/find-recruiters',
     action_text: 'View Recruiter',
-  },
-  {
-    id: 'notif_3',
-    title: 'Skill Badge Verified',
-    message: 'You unlocked the "FastAPI & Modern Microservices" Advanced Skill Certification.',
-    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    notification_type: 'Profile',
-    is_read: true,
-    action_url: null,
-    action_text: null,
+    receiver_role: 'student',
   },
 ];
 
-// In-memory store for mock mode (so mutations work in the same session)
 let _mockStore = null;
 
 const getMockStore = () => {
@@ -50,22 +41,107 @@ const getMockStore = () => {
 
 export const notificationService = {
   /**
-   * Fetch all notifications for the current user, ordered newest first.
+   * Fetch all notifications for the current user session (filtered by recipient).
    */
   async getNotifications() {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data || [];
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+
+        let query = supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (userId) {
+          query = query.or(`user_id.eq.${userId},receiver_id.eq.${userId}`);
+        }
+
+        const { data, error } = await query;
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn('Supabase getNotifications error:', err.message);
+      }
     }
     return getMockStore();
   },
 
   /**
-   * Mark a single notification as read by ID.
+   * Fetch system-wide notifications for the Admin Portal.
+   */
+  async getAdminNotifications() {
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn('Supabase getAdminNotifications error:', err.message);
+      }
+    }
+    return getMockStore();
+  },
+
+  /**
+   * Create a new notification row in Supabase and notify recipient.
+   */
+  async createNotification({
+    user_id,
+    receiver_id,
+    sender_id,
+    sender_role = 'system',
+    receiver_role = 'student',
+    title,
+    message,
+    notification_type = 'system',
+    action_url = null,
+    action_text = null,
+    metadata = null,
+    is_admin_viewable = true
+  }) {
+    const targetUserId = receiver_id || user_id;
+
+    const payload = {
+      user_id: targetUserId,
+      receiver_id: targetUserId,
+      sender_id: sender_id || null,
+      sender_role,
+      receiver_role,
+      title,
+      message,
+      notification_type,
+      action_url,
+      action_text,
+      metadata,
+      is_admin_viewable,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .insert([payload])
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      } catch (err) {
+        console.warn('Failed to insert notification into Supabase:', err.message);
+      }
+    }
+
+    const mockItem = { id: `notif_${Date.now()}`, ...payload };
+    getMockStore().unshift(mockItem);
+    return mockItem;
+  },
+
+  /**
+   * Mark a single notification as read.
    */
   async markAsRead(id) {
     if (isSupabaseConfigured()) {
@@ -73,7 +149,7 @@ export const notificationService = {
         .from('notifications')
         .update({ is_read: true })
         .eq('id', id);
-      if (error) throw error;
+      if (error) console.warn('markAsRead error:', error.message);
     } else {
       const store = getMockStore();
       const item = store.find((n) => n.id === id);
@@ -91,7 +167,7 @@ export const notificationService = {
         .from('notifications')
         .update({ is_read: true })
         .eq('is_read', false);
-      if (error) throw error;
+      if (error) console.warn('markAllAsRead error:', error.message);
     } else {
       getMockStore().forEach((n) => { n.is_read = true; });
     }
@@ -99,7 +175,7 @@ export const notificationService = {
   },
 
   /**
-   * Delete a single notification by ID.
+   * Delete a single notification.
    */
   async deleteNotification(id) {
     if (isSupabaseConfigured()) {
@@ -107,7 +183,7 @@ export const notificationService = {
         .from('notifications')
         .delete()
         .eq('id', id);
-      if (error) throw error;
+      if (error) console.warn('deleteNotification error:', error.message);
     } else {
       _mockStore = getMockStore().filter((n) => n.id !== id);
     }
@@ -115,16 +191,15 @@ export const notificationService = {
   },
 
   /**
-   * Delete ALL notifications (for the current user session).
+   * Clear all notifications.
    */
   async clearAllNotifications() {
     if (isSupabaseConfigured()) {
-      // Only delete this user's notifications — RLS handles the scoping.
       const { error } = await supabase
         .from('notifications')
         .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows visible to user via RLS
-      if (error) throw error;
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) console.warn('clearAllNotifications error:', error.message);
     } else {
       _mockStore = [];
     }
@@ -132,51 +207,26 @@ export const notificationService = {
   },
 
   /**
-   * Create a new notification record in Supabase.
-   * Useful for triggering in-app notifications from other services.
-   *
-   * @param {object} payload - { user_id, title, message, notification_type, action_url, action_text }
-   */
-  async createNotification(payload) {
-    if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('notifications')
-        .insert([{
-          user_id: payload.user_id,
-          title: payload.title,
-          message: payload.message,
-          notification_type: payload.notification_type || 'system',
-          action_url: payload.action_url || null,
-          action_text: payload.action_text || null,
-          is_read: false,
-        }])
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    }
-    // Mock mode: push into the local store
-    const newNotif = {
-      id: `mock_${Date.now()}`,
-      ...payload,
-      is_read: false,
-      created_at: new Date().toISOString(),
-    };
-    getMockStore().unshift(newNotif);
-    return newNotif;
-  },
-
-  /**
-   * Get the count of unread notifications.
+   * Get unread count for current user.
    */
   async getUnreadCount() {
     if (isSupabaseConfigured()) {
-      const { count, error } = await supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_read', false);
-      if (error) throw error;
-      return count || 0;
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+
+        let query = supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_read', false);
+
+        if (userId) {
+          query = query.or(`user_id.eq.${userId},receiver_id.eq.${userId}`);
+        }
+
+        const { count, error } = await query;
+        if (!error) return count || 0;
+      } catch (err) {}
     }
     return getMockStore().filter((n) => !n.is_read).length;
   },

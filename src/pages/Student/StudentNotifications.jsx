@@ -10,7 +10,9 @@ import { FaCrown } from 'react-icons/fa';
 import DashboardLayout from '../../components/Dashboard/DashboardLayout';
 import toast from 'react-hot-toast';
 import notificationService from '../../services/notificationService';
+import recruiterService from '../../services/recruiterService';
 import './studentNotifications.css';
+
 
 export const StudentNotifications = () => {
   const [notifications, setNotifications] = useState([]);
@@ -145,6 +147,23 @@ export const StudentNotifications = () => {
     return `${diffDays} days ago`;
   };
 
+  const handleRescheduleResponse = async (item, accepted) => {
+    try {
+      const requestId = item.metadata?.requestId || item.entity_id;
+      const recruiterUserId = item.sender_id;
+      await recruiterService.respondToReschedule(requestId, accepted, recruiterUserId, 'Candidate');
+      if (accepted) {
+        toast.success('🎉 Reschedule accepted! The recruiter has been notified.');
+      } else {
+        toast.error('Reschedule declined.');
+      }
+      handleMarkAsRead(item.id);
+    } catch (err) {
+      console.error('Failed to respond to reschedule:', err);
+      toast.error('Action failed.');
+    }
+  };
+
   return (
     <DashboardLayout title="Notification Center">
       <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -259,6 +278,8 @@ export const StudentNotifications = () => {
             ) : (
               filteredNotifications.map((item) => {
                 const isUnread = item.is_read === false || item.unread === true;
+                const isReschedule = item.notification_type === 'RESCHEDULE_REQUEST';
+
                 return (
                   <div key={item.id} className={`notification-item-card ${isUnread ? 'unread' : ''}`}>
                     <div style={{ fontSize: '1.4rem', padding: '0.4rem', borderRadius: '10px', background: 'rgba(255,255,255,0.05)' }}>
@@ -280,16 +301,36 @@ export const StudentNotifications = () => {
                         {item.message}
                       </p>
 
-                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        {item.action_url && item.action_text && (
-                          <a
-                            href={item.action_url || item.actionUrl}
-                            className="btn-primary"
-                            style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem', textDecoration: 'none' }}
-                          >
-                            {item.action_text || item.actionText}
-                          </a>
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {isReschedule ? (
+                          <>
+                            <button
+                              onClick={() => handleRescheduleResponse(item, true)}
+                              className="btn-primary"
+                              style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem' }}
+                            >
+                              Accept Reschedule
+                            </button>
+                            <button
+                              onClick={() => handleRescheduleResponse(item, false)}
+                              className="btn-secondary"
+                              style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem', color: '#EF4444' }}
+                            >
+                              Decline Reschedule
+                            </button>
+                          </>
+                        ) : (
+                          item.action_url && item.action_text && (
+                            <a
+                              href={item.action_url || item.actionUrl}
+                              className="btn-primary"
+                              style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem', textDecoration: 'none' }}
+                            >
+                              {item.action_text || item.actionText}
+                            </a>
+                          )
                         )}
+
                         {isUnread && (
                           <button
                             onClick={() => handleMarkAsRead(item.id)}
